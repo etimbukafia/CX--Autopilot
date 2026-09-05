@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cx-autopilot"
+version = "0.1.0"
+description = "Evidence-linked operational change proposals for governed CX agent systems"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = ["pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.11,<2",
+    "pytest>=8,<10",
+    "ruff>=0.6,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cx_autopilot"]
+
+[tool.pytest.ini_options]
+addopts = "-q --basetemp .pytest-tmp"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["cx_autopilot"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+show_error_codes = true
