@@ -94,13 +94,15 @@ def inventory() -> AgentSystemInventorySnapshot:
 
 def core_records() -> tuple[object, ...]:
     agent = ref(ComponentType.AGENT, "support-agent")
+    updated_agent = ref(ComponentType.AGENT, "support-agent", "1.1.0")
     prompt = ref(ComponentType.PROMPT, "support-prompt")
     skill = ref(ComponentType.SKILL, "payment-skill")
     missing_tool = ref(ComponentType.TOOL, "get_transaction_history")
     proposed_change = ComponentChange(
         operation=ComponentChangeOperation.ADD_AGENT_TOOL_REF,
-        source_ref=agent,
-        target_ref=missing_tool,
+        subject_before_ref=agent,
+        subject_after_ref=updated_agent,
+        related_after_ref=missing_tool,
         rationale="Grant the exact missing executable operation.",
     )
     opportunity = Opportunity(
@@ -281,8 +283,9 @@ def test_inventory_keeps_skill_dependency_separate_from_agent_authority() -> Non
     with pytest.raises(ValidationError):
         ComponentChange(
             operation=ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
-            source_ref=agent,
-            target_ref=tool,
+            subject_before_ref=agent,
+            subject_after_ref=ref(ComponentType.AGENT, "support-agent", "1.1.0"),
+            related_after_ref=tool,
             rationale="Invalidly use an Agent as a Skill source.",
         )
 
@@ -321,6 +324,76 @@ def test_change_target_strategy_and_no_change_boundaries_are_explicit() -> None:
             status="READY",
             created_at=NOW,
         )
+
+    with pytest.raises(ValidationError):
+        ChangeProposal(
+            proposal_id="proposal-agent-target",
+            tenant_id="tenant-a",
+            opportunity_id="opportunity-1",
+            diagnosis_id="diagnosis-1",
+            change_target=ChangeTarget.AGENT,
+            strategy=ChangeStrategy.EXTEND,
+            baseline_inventory_snapshot_id="inventory-1",
+            target_agent_refs=proposal.target_agent_refs,
+            proposed_component_changes=proposal.proposed_component_changes,
+            rationale="Tool authority must remain a TOOL-targeted change.",
+            evidence_refs=("evidence:event-1",),
+            risk_classification="LOW",
+            created_at=NOW,
+        )
+
+
+def test_component_changes_require_exact_before_after_references() -> None:
+    agent = ref(ComponentType.AGENT, "support-agent")
+    updated_agent = ref(ComponentType.AGENT, "support-agent", "1.1.0")
+    tool = ref(ComponentType.TOOL, "get_transaction_history")
+
+    authority_change = ComponentChange(
+        operation=ComponentChangeOperation.ADD_AGENT_TOOL_REF,
+        subject_before_ref=agent,
+        subject_after_ref=updated_agent,
+        related_after_ref=tool,
+        rationale="Add the exact executable authority in a new agent version.",
+    )
+    assert authority_change.subject_before_ref == agent
+    assert authority_change.subject_after_ref == updated_agent
+    assert authority_change.related_after_ref == tool
+
+    with pytest.raises(ValidationError):
+        ComponentChange(
+            operation=ComponentChangeOperation.ADD_AGENT_TOOL_REF,
+            subject_after_ref=updated_agent,
+            related_after_ref=tool,
+            rationale="A mutation needs its exact baseline subject.",
+        )
+
+    with pytest.raises(ValidationError):
+        ComponentChange(
+            operation=ComponentChangeOperation.ADD_AGENT_TOOL_REF,
+            subject_before_ref=agent,
+            subject_after_ref=agent,
+            related_after_ref=tool,
+            rationale="The subject must move to a distinct governed identity.",
+        )
+
+    prompt_change = ComponentChange(
+        operation=ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF,
+        subject_before_ref=ref(ComponentType.PROMPT, "support-prompt"),
+        subject_after_ref=ref(ComponentType.PROMPT, "support-prompt", "1.1.0"),
+        related_before_ref=agent,
+        rationale="Replace the prompt with its exact new version.",
+    )
+    assert prompt_change.related_before_ref == agent
+
+    skill_change = ComponentChange(
+        operation=ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
+        subject_before_ref=ref(ComponentType.SKILL, "payment-skill"),
+        subject_after_ref=ref(ComponentType.SKILL, "payment-skill", "1.1.0"),
+        related_after_ref=tool,
+        rationale="Record the new exact Skill version and dependency.",
+    )
+    assert skill_change.subject_after_ref is not None
+    assert skill_change.subject_after_ref.version == "1.1.0"
 
 
 def test_timestamps_and_evidence_are_validated() -> None:

@@ -473,12 +473,13 @@ class ComponentChangeOperation(StrEnum):
 
 
 class ComponentChange(ImmutableModel):
-    """One explicit component or relationship change."""
+    """One exact before-to-after governed component or relationship change."""
 
     operation: ComponentChangeOperation
-    source_ref: ExactComponentReference | None = None
-    target_ref: ExactComponentReference | None = None
-    baseline_ref: ExactComponentReference | None = None
+    subject_before_ref: ExactComponentReference | None = None
+    subject_after_ref: ExactComponentReference | None = None
+    related_before_ref: ExactComponentReference | None = None
+    related_after_ref: ExactComponentReference | None = None
     rationale: str = Field(min_length=1)
 
     @field_validator("rationale")
@@ -491,45 +492,87 @@ class ComponentChange(ImmutableModel):
         operation = self.operation
         if operation is ComponentChangeOperation.NO_CHANGE:
             if any(
-                ref is not None for ref in (self.source_ref, self.target_ref, self.baseline_ref)
+                ref is not None
+                for ref in (
+                    self.subject_before_ref,
+                    self.subject_after_ref,
+                    self.related_before_ref,
+                    self.related_after_ref,
+                )
             ):
                 raise ValueError("NO_CHANGE must not contain component references")
             return self
-        if operation in {
-            ComponentChangeOperation.CREATE_AGENT,
+
+        if operation is ComponentChangeOperation.CREATE_AGENT:
+            self._require_creation(ComponentType.AGENT)
+        elif operation is ComponentChangeOperation.CREATE_TOOL:
+            self._require_creation(ComponentType.TOOL)
+        elif operation is ComponentChangeOperation.CREATE_SKILL:
+            self._require_creation(ComponentType.SKILL)
+        elif operation is ComponentChangeOperation.CREATE_PROMPT:
+            self._require_creation(ComponentType.PROMPT)
+        elif operation in {
             ComponentChangeOperation.COMPOSE_AGENT,
             ComponentChangeOperation.EXTEND_AGENT,
         }:
-            _require_target_type(self.target_ref, ComponentType.AGENT)
-        elif operation is ComponentChangeOperation.CREATE_TOOL:
-            _require_target_type(self.target_ref, ComponentType.TOOL)
-        elif operation is ComponentChangeOperation.CREATE_SKILL:
-            _require_target_type(self.target_ref, ComponentType.SKILL)
-        elif operation is ComponentChangeOperation.CREATE_PROMPT:
-            _require_target_type(self.target_ref, ComponentType.PROMPT)
+            self._require_subject_transition(ComponentType.AGENT)
         elif operation in {
             ComponentChangeOperation.ADD_AGENT_TOOL_REF,
             ComponentChangeOperation.REMOVE_AGENT_TOOL_REF,
         }:
-            _require_source_type(self.source_ref, ComponentType.AGENT)
-            _require_target_type(self.target_ref, ComponentType.TOOL)
+            self._require_subject_transition(ComponentType.AGENT)
+            if operation is ComponentChangeOperation.ADD_AGENT_TOOL_REF:
+                self._require_related_add(ComponentType.TOOL)
+            else:
+                self._require_related_remove(ComponentType.TOOL)
         elif operation in {
             ComponentChangeOperation.ADD_AGENT_SKILL_REF,
             ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
         }:
-            _require_source_type(self.source_ref, ComponentType.AGENT)
-            _require_target_type(self.target_ref, ComponentType.SKILL)
+            self._require_subject_transition(ComponentType.AGENT)
+            if operation is ComponentChangeOperation.ADD_AGENT_SKILL_REF:
+                self._require_related_add(ComponentType.SKILL)
+            else:
+                self._require_related_remove(ComponentType.SKILL)
         elif operation is ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF:
-            _require_source_type(self.source_ref, ComponentType.AGENT)
-            _require_target_type(self.target_ref, ComponentType.PROMPT)
+            self._require_subject_transition(ComponentType.PROMPT)
+            _require_ref_type(self.related_before_ref, ComponentType.AGENT, "related_before_ref")
+            if self.related_after_ref is not None:
+                _require_ref_type(self.related_after_ref, ComponentType.AGENT, "related_after_ref")
         elif operation in {
             ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
             ComponentChangeOperation.ADD_SKILL_OPTIONAL_TOOL_REF,
             ComponentChangeOperation.REMOVE_SKILL_TOOL_REF,
         }:
-            _require_source_type(self.source_ref, ComponentType.SKILL)
-            _require_target_type(self.target_ref, ComponentType.TOOL)
+            self._require_subject_transition(ComponentType.SKILL)
+            if operation is ComponentChangeOperation.REMOVE_SKILL_TOOL_REF:
+                self._require_related_remove(ComponentType.TOOL)
+            else:
+                self._require_related_add(ComponentType.TOOL)
         return self
+
+    def _require_creation(self, expected: ComponentType) -> None:
+        if self.subject_before_ref is not None:
+            raise ValueError("creation operations must not have subject_before_ref")
+        _require_ref_type(self.subject_after_ref, expected, "subject_after_ref")
+        if self.related_before_ref is not None or self.related_after_ref is not None:
+            raise ValueError("creation operations must not contain related component references")
+
+    def _require_subject_transition(self, expected: ComponentType) -> None:
+        before = _require_ref_type(self.subject_before_ref, expected, "subject_before_ref")
+        after = _require_ref_type(self.subject_after_ref, expected, "subject_after_ref")
+        if before.identity == after.identity:
+            raise ValueError("subject_before_ref and subject_after_ref must differ")
+
+    def _require_related_add(self, expected: ComponentType) -> None:
+        if self.related_before_ref is not None:
+            raise ValueError("add operations must not have related_before_ref")
+        _require_ref_type(self.related_after_ref, expected, "related_after_ref")
+
+    def _require_related_remove(self, expected: ComponentType) -> None:
+        _require_ref_type(self.related_before_ref, expected, "related_before_ref")
+        if self.related_after_ref is not None:
+            raise ValueError("remove operations must not have related_after_ref")
 
 
 ProposedComponentChange = ComponentChange
@@ -587,7 +630,13 @@ class ChangeProposal(ImmutableModel):
         if any(change.operation is ComponentChangeOperation.NO_CHANGE for change in operations):
             raise ValueError("NO_CHANGE is not a proposal operation")
         keys = [
-            (change.operation, _ref_identity(change.source_ref), _ref_identity(change.target_ref))
+            (
+                change.operation,
+                _ref_identity(change.subject_before_ref),
+                _ref_identity(change.subject_after_ref),
+                _ref_identity(change.related_before_ref),
+                _ref_identity(change.related_after_ref),
+            )
             for change in operations
         ]
         unique_values(keys, "proposed_component_changes")
@@ -830,20 +879,15 @@ def _require_type(
         raise ValueError(f"{field_name} must contain {expected.value} references")
 
 
-def _require_source_type(
-    reference: ExactComponentReference | None, expected: ComponentType
-) -> None:
+def _require_ref_type(
+    reference: ExactComponentReference | None,
+    expected: ComponentType,
+    field_name: str,
+) -> ExactComponentReference:
     if reference is None:
-        raise ValueError("operation source_ref is required")
-    _require_type(reference, expected, "source_ref")
-
-
-def _require_target_type(
-    reference: ExactComponentReference | None, expected: ComponentType
-) -> None:
-    if reference is None:
-        raise ValueError("operation target_ref is required")
-    _require_type(reference, expected, "target_ref")
+        raise ValueError(f"{field_name} is required")
+    _require_type(reference, expected, field_name)
+    return reference
 
 
 def _require_distinct(first: ExactComponentReference, second: ExactComponentReference) -> None:
@@ -883,11 +927,6 @@ def _allowed_operations(target: ChangeTarget) -> set[ComponentChangeOperation]:
             ComponentChangeOperation.CREATE_AGENT,
             ComponentChangeOperation.COMPOSE_AGENT,
             ComponentChangeOperation.EXTEND_AGENT,
-            ComponentChangeOperation.ADD_AGENT_TOOL_REF,
-            ComponentChangeOperation.REMOVE_AGENT_TOOL_REF,
-            ComponentChangeOperation.ADD_AGENT_SKILL_REF,
-            ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
-            ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF,
         }
     if target is ChangeTarget.TOOL:
         return {
