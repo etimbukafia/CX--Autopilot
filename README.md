@@ -22,9 +22,14 @@ CX evidence -> normalized signal -> opportunity -> diagnosis
     -> pilot recommendation -> human decision
 ```
 
-This repository currently implements the immutable provider-neutral contracts
-and SQLite persistence foundation from Phases 0–2. CX, Harness, and Lab
-adapters are intentionally not implemented in this pass.
+This repository implements the immutable provider-neutral contracts and SQLite
+persistence foundation from Phases 0–2, plus the Phase 3–5 CX Platform
+evidence adapter, deterministic opportunity detectors, and opportunity
+clustering/prioritization. Harness inventory, candidate construction, and Lab
+adapters are intentionally outside this pass.
+
+Phase 3–5 semantics are documented in
+[`docs/PHASE_3_5_IMPLEMENTATION.md`](docs/PHASE_3_5_IMPLEMENTATION.md).
 
 ## Development
 

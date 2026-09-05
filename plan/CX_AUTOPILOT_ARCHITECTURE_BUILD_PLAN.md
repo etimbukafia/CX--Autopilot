@@ -1,6 +1,6 @@
 # CX Autopilot Architecture and Build Plan
 
-Status: proposed implementation plan
+Status: Phases 0-5 implemented; Phases 6-17 pending
 
 ## 1. Product goal
 
@@ -1138,22 +1138,22 @@ Create the repository foundation, lock the product boundaries, and verify the cu
 
 ### Tasks
 
-- [ ] Add package scaffold.
-- [ ] Add `pyproject.toml`.
-- [ ] Configure pytest, Ruff, mypy, formatting, and compile checks.
-- [ ] Add CI quality checks.
-- [ ] Add README with the product boundary.
-- [ ] Add an architecture decision record for repository ownership boundaries.
-- [ ] Define source package name `cx_autopilot`.
-- [ ] Confirm the Python version with the connected repositories.
-- [ ] Inspect the current AI-native CX Platform evidence/export contracts.
-- [ ] Inspect CX event identity, tenant identity, outcome identity, and execution/trace linkage.
-- [ ] Inspect the current Enterprise Agent Harness public contracts at https://github.com/etimbukafia/enterprise-agent-harness.
-- [ ] Verify current Agent, Prompt, Skill, Tool, Policy, ComponentReference, registry snapshot, AgentConfig, factory, and ResolvedAgentManifest contracts.
-- [ ] Inspect the current Enterprise Agent Improvement Lab public contracts at https://github.com/etimbukafia/enterprise-agent_improvement_lab.
-- [ ] Verify current candidate, evaluation, comparison, promotion-evidence, and manifest-reference contracts.
-- [ ] Record only the external contracts required by the reference slice.
-- [ ] Do not guess external field names or constructor behavior.
+- [x] Add package scaffold.
+- [x] Add `pyproject.toml`.
+- [x] Configure pytest, Ruff, mypy, formatting, and compile checks.
+- [x] Add CI quality checks.
+- [x] Add README with the product boundary.
+- [x] Add an architecture decision record for repository ownership boundaries.
+- [x] Define source package name `cx_autopilot`.
+- [x] Confirm the Python version with the connected repositories.
+- [x] Inspect the current AI-native CX Platform evidence/export contracts.
+- [x] Inspect CX event identity, tenant identity, outcome identity, and execution/trace linkage.
+- [x] Inspect the current Enterprise Agent Harness public contracts at https://github.com/etimbukafia/enterprise-agent-harness.
+- [x] Verify current Agent, Prompt, Skill, Tool, Policy, ComponentReference, registry snapshot, AgentConfig, factory, and ResolvedAgentManifest contracts.
+- [x] Inspect the current Enterprise Agent Improvement Lab public contracts at https://github.com/etimbukafia/enterprise-agent_improvement_lab.
+- [x] Verify current candidate, evaluation, comparison, promotion-evidence, and manifest-reference contracts.
+- [x] Record only the external contracts required by the reference slice.
+- [x] Do not guess external field names or constructor behavior.
 
 ### Exit criteria
 
@@ -1172,26 +1172,26 @@ Define immutable domain contracts before implementing discovery or diagnosis log
 
 ### Tasks
 
-- [ ] Implement `ExactComponentReference`.
-- [ ] Implement `EvidenceQuality`.
-- [ ] Implement `OperationalSignal`.
-- [ ] Implement `Opportunity`.
-- [ ] Implement `OpportunityCluster`.
-- [ ] Implement `AgentSystemInventorySnapshot`.
-- [ ] Implement `ProblemDiagnosis`.
-- [ ] Implement `ChangeTarget`.
-- [ ] Implement `ChangeStrategy`.
-- [ ] Implement `ComponentChangeOperation`.
-- [ ] Implement `ChangeProposal`.
-- [ ] Implement `OperationalDisposition`.
-- [ ] Implement `CandidateReference`.
-- [ ] Implement `EvaluationReference`.
-- [ ] Implement `PilotRecommendation`.
-- [ ] Implement `DecisionRecord`.
-- [ ] Add evidence-reference validation.
-- [ ] Add immutable lineage validation.
-- [ ] Add exact-version validation for component references.
-- [ ] Keep all contracts independent of external SDKs and Harness/Lab types.
+- [x] Implement `ExactComponentReference`.
+- [x] Implement `EvidenceQuality`.
+- [x] Implement `OperationalSignal`.
+- [x] Implement `Opportunity`.
+- [x] Implement `OpportunityCluster`.
+- [x] Implement `AgentSystemInventorySnapshot`.
+- [x] Implement `ProblemDiagnosis`.
+- [x] Implement `ChangeTarget`.
+- [x] Implement `ChangeStrategy`.
+- [x] Implement `ComponentChangeOperation`.
+- [x] Implement `ChangeProposal`.
+- [x] Implement `OperationalDisposition`.
+- [x] Implement `CandidateReference`.
+- [x] Implement `EvaluationReference`.
+- [x] Implement `PilotRecommendation`.
+- [x] Implement `DecisionRecord`.
+- [x] Add evidence-reference validation.
+- [x] Add immutable lineage validation.
+- [x] Add exact-version validation for component references.
+- [x] Keep all contracts independent of external SDKs and Harness/Lab types.
 
 ### Exit criteria
 
@@ -1207,16 +1207,16 @@ Persist Autopilot-owned state without duplicating source-system truth or inflati
 
 ### Tasks
 
-- [ ] Define storage ports.
-- [ ] Add SQLite adapter.
-- [ ] Persist all core domain records.
-- [ ] Preserve timestamps and exact references.
-- [ ] Add explicit tenant scope.
-- [ ] Add source-record uniqueness constraints.
-- [ ] Make source ingestion idempotent.
-- [ ] Add explicit transaction boundaries.
-- [ ] Ensure duplicate ingestion does not create duplicate signals or frequency inflation.
-- [ ] Add repository behavior tests.
+- [x] Define storage ports.
+- [x] Add SQLite adapter.
+- [x] Persist all core domain records.
+- [x] Preserve timestamps and exact references.
+- [x] Add explicit tenant scope.
+- [x] Add source-record uniqueness constraints.
+- [x] Make source ingestion idempotent.
+- [x] Add explicit transaction boundaries.
+- [x] Ensure duplicate ingestion does not create duplicate signals or frequency inflation.
+- [x] Add repository behavior tests.
 
 ### Exit criteria
 
@@ -1234,17 +1234,17 @@ Read operational evidence from the CX Platform and normalize a complete, trustwo
 
 ### Tasks
 
-- [ ] Implement the minimal CX Platform evidence port based on the verified Phase 0 contracts.
-- [ ] Implement the CX Platform adapter.
-- [ ] Normalize conversations, events, outcomes, escalations, and execution references into `OperationalSignal`.
-- [ ] Preserve stable source identity.
-- [ ] Preserve source references instead of copying large payloads.
-- [ ] Correlate conversation, ticket, tool, approval, escalation, business operation, outcome, and repeat-contact evidence into a journey when supported by source identity.
-- [ ] Do not assume `interaction_id` is the only correlation key unless the source contract guarantees it.
-- [ ] Link CX execution references to Harness execution/trace references when available.
-- [ ] Assign evidence-quality state from source facts.
-- [ ] Keep source facts separate from derived interpretations.
-- [ ] Add deterministic local fixtures for tests.
+- [x] Implement the minimal CX Platform evidence port based on the verified Phase 0 contracts.
+- [x] Implement the CX Platform adapter.
+- [x] Normalize conversations, events, outcomes, escalations, and execution references into `OperationalSignal`.
+- [x] Preserve stable source identity.
+- [x] Preserve source references instead of copying large payloads.
+- [x] Correlate conversation, ticket, tool, approval, escalation, business operation, outcome, and repeat-contact evidence into a journey when supported by source identity.
+- [x] Do not assume `interaction_id` is the only correlation key unless the source contract guarantees it.
+- [x] Link CX execution references to Harness execution/trace references when available.
+- [x] Assign evidence-quality state from source facts.
+- [x] Keep source facts separate from derived interpretations.
+- [x] Add deterministic local fixtures for tests.
 
 ### Exit criteria
 
@@ -1273,12 +1273,12 @@ Implement narrowly scoped detection for:
 
 ### Tasks
 
-- [ ] Implement rule-based detectors.
-- [ ] Produce `Opportunity` records with exact evidence refs.
-- [ ] Keep detector outputs explainable.
-- [ ] Add typed threshold configuration.
-- [ ] Make repeated processing deterministic and idempotent.
-- [ ] Add behavior tests.
+- [x] Implement rule-based detectors.
+- [x] Produce `Opportunity` records with exact evidence refs.
+- [x] Keep detector outputs explainable.
+- [x] Add typed threshold configuration.
+- [x] Make repeated processing deterministic and idempotent.
+- [x] Add behavior tests.
 
 ### Reference acceptance
 
@@ -1298,14 +1298,14 @@ Group repeated opportunities and rank them for diagnosis without hiding evidence
 
 ### Tasks
 
-- [ ] Implement tenant-scoped deterministic clustering keys for the first reference patterns.
-- [ ] Add explicit clustering windows.
-- [ ] Preserve contributing opportunity IDs.
-- [ ] Preserve stable cluster membership for the same evidence window.
-- [ ] Calculate separate frequency, impact, confidence, operational-effort, predictability, and risk factors.
-- [ ] Add deterministic prioritization.
-- [ ] Persist the underlying factors and final rank separately.
-- [ ] Add tests for window boundaries and duplicate evidence.
+- [x] Implement tenant-scoped deterministic clustering keys for the first reference patterns.
+- [x] Add explicit clustering windows.
+- [x] Preserve contributing opportunity IDs.
+- [x] Preserve stable cluster membership for the same evidence window.
+- [x] Calculate separate frequency, impact, confidence, operational-effort, predictability, and risk factors.
+- [x] Add deterministic prioritization.
+- [x] Persist the underlying factors and final rank separately.
+- [x] Add tests for window boundaries and duplicate evidence.
 
 ### Reference acceptance
 

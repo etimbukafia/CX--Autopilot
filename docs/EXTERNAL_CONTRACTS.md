@@ -36,9 +36,13 @@ Verified facts needed by a later adapter:
 - Business-operation identity is carried by source event data and the
   business-system event feed. Autopilot must retain the source reference and
   must not copy business truth into its own store.
-- The current CX-owned models do not carry `tenant_id`. A future CX adapter
-  must receive tenant identity from its integration boundary; it must not
-  infer a tenant from customer, ticket, conversation, or event IDs.
+- The current CX-owned models do not carry `tenant_id`. The Phase 3 adapter
+  receives tenant identity in its constructor; it does not infer a tenant from
+  customer, ticket, conversation, or event IDs.
+- The adapter follows the typed HTTP read routes for events, tickets, ticket
+  detail, conversation detail, outcomes, and execution references. It keeps
+  source references and bounded normalized attributes in `OperationalSignal`.
+  It does not copy message content, business truth, or full Harness traces.
 
 ## Enterprise Agent Harness
 

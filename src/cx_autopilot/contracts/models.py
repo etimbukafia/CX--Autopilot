@@ -1,4 +1,4 @@
-"""Immutable provider-neutral domain contracts for Phases 1 and 2."""
+"""Immutable provider-neutral domain contracts for the initial phases."""
 
 from __future__ import annotations
 
@@ -155,6 +155,19 @@ class OperationalSignal(ImmutableModel):
         )
 
 
+class OpportunityPattern(StrEnum):
+    """Deterministic operational patterns that can become opportunities."""
+
+    REPEATED_OPERATION_SEQUENCE = "REPEATED_OPERATION_SEQUENCE"
+    REPEATED_ESCALATION = "REPEATED_ESCALATION"
+    REPEAT_CONTACT_UNRESOLVED = "REPEAT_CONTACT_UNRESOLVED"
+    REPEATED_LOOKUP = "REPEATED_LOOKUP"
+    REPEATED_APPROVAL_WAIT = "REPEATED_APPROVAL_WAIT"
+    REPEATED_POLICY_DENIAL = "REPEATED_POLICY_DENIAL"
+    REPEATED_HUMAN_WORKAROUND = "REPEATED_HUMAN_WORKAROUND"
+    REPEATED_OPERATOR_CORRECTION = "REPEATED_OPERATOR_CORRECTION"
+
+
 class Opportunity(ImmutableModel):
     """One evidence-backed automation opportunity, before diagnosis."""
 
@@ -169,22 +182,67 @@ class Opportunity(ImmutableModel):
     confidence: float = Field(ge=0.0, le=1.0)
     status: str = Field(min_length=1)
     created_at: datetime
+    detector_name: str = "unspecified"
+    pattern_type: OpportunityPattern = OpportunityPattern.REPEATED_LOOKUP
+    pattern_key: str = "unspecified"
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    occurrence_keys: tuple[str, ...] = ()
+    operational_effort_estimate: float = Field(default=0.0, ge=0.0)
+    predictability_estimate: float = Field(default=0.0, ge=0.0, le=1.0)
+    risk_estimate: float = Field(default=0.0, ge=0.0, le=1.0)
+    risk_factors: tuple[str, ...] = ()
 
-    @field_validator("opportunity_id", "tenant_id", "title", "description", "status")
+    @field_validator(
+        "opportunity_id",
+        "tenant_id",
+        "title",
+        "description",
+        "status",
+        "detector_name",
+        "pattern_key",
+    )
     @classmethod
     def required_text_is_non_blank(cls, value: str, info: object) -> str:
         return non_blank(value, getattr(info, "field_name", "value"))
 
-    @field_validator("source_signal_ids", "evidence_refs")
+    @field_validator("source_signal_ids", "evidence_refs", "occurrence_keys", "risk_factors")
     @classmethod
     def references_are_unique(cls, value: tuple[str, ...], info: object) -> tuple[str, ...]:
         unique_values(value, getattr(info, "field_name", "references"))
         return value
 
-    @field_validator("created_at")
+    @field_validator("created_at", "window_start", "window_end")
     @classmethod
-    def created_at_is_aware(cls, value: datetime) -> datetime:
-        return aware_timestamp(value, "created_at")
+    def opportunity_timestamps_are_aware(
+        cls, value: datetime | None, info: object
+    ) -> datetime | None:
+        return (
+            None
+            if value is None
+            else aware_timestamp(value, getattr(info, "field_name", "timestamp"))
+        )
+
+    @model_validator(mode="after")
+    def opportunity_window_is_ordered(self) -> "Opportunity":
+        if (
+            self.window_start is not None
+            and self.window_end is not None
+            and self.window_end < self.window_start
+        ):
+            raise ValueError("window_end must not precede window_start")
+        return self
+
+
+class OpportunityPriorityFactors(ImmutableModel):
+    """Inspectable normalized factors used for cluster prioritization."""
+
+    frequency: float = Field(ge=0.0, le=1.0)
+    impact: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    operational_effort: float = Field(ge=0.0, le=1.0)
+    predictability: float = Field(ge=0.0, le=1.0)
+    risk: float = Field(ge=0.0, le=1.0)
 
 
 class OpportunityCluster(ImmutableModel):
@@ -201,8 +259,22 @@ class OpportunityCluster(ImmutableModel):
     impact: float = Field(ge=0.0)
     confidence: float = Field(ge=0.0, le=1.0)
     risk_factors: tuple[str, ...] = ()
+    pattern_type: OpportunityPattern = OpportunityPattern.REPEATED_LOOKUP
+    pattern_key: str = "unspecified"
+    prioritization_factors: OpportunityPriorityFactors = Field(
+        default_factory=lambda: OpportunityPriorityFactors(
+            frequency=0.0,
+            impact=0.0,
+            confidence=0.0,
+            operational_effort=0.0,
+            predictability=0.0,
+            risk=0.0,
+        )
+    )
+    priority_score: float = Field(ge=0.0, le=1.0, default=0.0)
+    priority_rank: int = Field(ge=1, default=1)
 
-    @field_validator("cluster_id", "tenant_id", "pattern_summary")
+    @field_validator("cluster_id", "tenant_id", "pattern_summary", "pattern_key")
     @classmethod
     def cluster_text_is_non_blank(cls, value: str, info: object) -> str:
         return non_blank(value, getattr(info, "field_name", "value"))
@@ -974,6 +1046,8 @@ __all__ = [
     "OperationalSignal",
     "Opportunity",
     "OpportunityCluster",
+    "OpportunityPattern",
+    "OpportunityPriorityFactors",
     "PilotRecommendation",
     "ProblemDiagnosis",
     "ProposedComponentChange",
