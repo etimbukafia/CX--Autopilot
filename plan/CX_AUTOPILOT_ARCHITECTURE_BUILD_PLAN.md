@@ -339,7 +339,7 @@ description
 source_signal_ids
 evidence_refs
 frequency_estimate
-impact_estimate
+impact_estimate (nullable when source evidence does not support it)
 confidence
 status
 created_at
@@ -362,7 +362,7 @@ opportunity_ids
 pattern_summary
 evidence_refs
 frequency
-impact
+impact (nullable when source evidence does not support it)
 confidence
 risk_factors
 ```
@@ -1302,7 +1302,7 @@ Group repeated opportunities and rank them for diagnosis without hiding evidence
 - [x] Add explicit clustering windows.
 - [x] Preserve contributing opportunity IDs.
 - [x] Preserve stable cluster membership for the same evidence window.
-- [x] Calculate separate frequency, impact, confidence, operational-effort, predictability, and risk factors.
+- [x] Calculate separate frequency, impact, confidence, operational-effort, predictability, and risk factors when source evidence supports them; preserve unsupported factors as unknown.
 - [x] Add deterministic prioritization.
 - [x] Persist the underlying factors and final rank separately.
 - [x] Add tests for window boundaries and duplicate evidence.

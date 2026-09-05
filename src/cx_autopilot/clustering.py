@@ -96,7 +96,8 @@ class OpportunityClusterer:
             key=lambda cluster: (
                 -cluster.priority_score,
                 -cluster.frequency,
-                -cluster.impact,
+                0 if cluster.impact is not None else 1,
+                -(cluster.impact or 0.0),
                 cluster.cluster_id,
             ),
         )
@@ -132,37 +133,45 @@ class OpportunityClusterer:
             for occurrence_key in opportunity.occurrence_keys
         }
         frequency = float(len(occurrence_keys or source_signal_ids or set(opportunity_ids)))
-        impact = max(opportunity.impact_estimate for opportunity in opportunities)
-        confidence = sum(opportunity.confidence for opportunity in opportunities) / len(
-            opportunities
-        )
-        effort = sum(
+        impact = _max_known(opportunity.impact_estimate for opportunity in opportunities)
+        confidence = _mean_known(opportunity.confidence for opportunity in opportunities)
+        if confidence is None:
+            raise ValueError("opportunity confidence must be available for clustering")
+        effort = _mean_known(
             opportunity.operational_effort_estimate for opportunity in opportunities
-        ) / len(opportunities)
-        predictability = sum(
+        )
+        predictability = _mean_known(
             opportunity.predictability_estimate for opportunity in opportunities
-        ) / len(opportunities)
-        risk = max(opportunity.risk_estimate for opportunity in opportunities)
+        )
+        risk = _max_known(opportunity.risk_estimate for opportunity in opportunities)
         risk_factors = tuple(
             sorted({factor for opportunity in opportunities for factor in opportunity.risk_factors})
         )
         factors = OpportunityPriorityFactors(
             frequency=min(1.0, frequency / self.config.frequency_cap),
-            impact=min(1.0, impact),
+            impact=impact,
             confidence=min(1.0, confidence),
-            operational_effort=min(1.0, effort),
-            predictability=min(1.0, predictability),
-            risk=min(1.0, risk),
+            operational_effort=effort,
+            predictability=predictability,
+            risk=risk,
+            effective_weights=_effective_weights(
+                factors={
+                    "frequency": min(1.0, frequency / self.config.frequency_cap),
+                    "impact": impact,
+                    "confidence": min(1.0, confidence),
+                    "operational_effort": effort,
+                    "predictability": predictability,
+                },
+                configured_weights={
+                    "frequency": self.config.frequency_weight,
+                    "impact": self.config.impact_weight,
+                    "confidence": self.config.confidence_weight,
+                    "operational_effort": self.config.operational_effort_weight,
+                    "predictability": self.config.predictability_weight,
+                },
+            ),
         )
-        score = (
-            self.config.frequency_weight * factors.frequency
-            + self.config.impact_weight * factors.impact
-            + self.config.confidence_weight * factors.confidence
-            + self.config.operational_effort_weight * factors.operational_effort
-            + self.config.predictability_weight * factors.predictability
-            - self.config.risk_penalty * factors.risk
-        )
-        priority_score = round(max(0.0, min(1.0, score)), 6)
+        priority_score = _priority_score(factors, self.config.risk_penalty)
         identity_payload = {
             "tenant_id": tenant_id,
             "pattern_type": pattern_type.value,
@@ -222,6 +231,56 @@ def _deduplicate_opportunities(
             )
         by_id[opportunity.opportunity_id] = opportunity
     return tuple(sorted(by_id.values(), key=lambda item: item.opportunity_id))
+
+
+def _mean_known(values: Iterable[float | None]) -> float | None:
+    known = [value for value in values if value is not None]
+    return None if not known else round(sum(known) / len(known), 6)
+
+
+def _max_known(values: Iterable[float | None]) -> float | None:
+    known = [value for value in values if value is not None]
+    return None if not known else max(known)
+
+
+def _effective_weights(
+    *,
+    factors: dict[str, float | None],
+    configured_weights: dict[str, float],
+) -> dict[str, float]:
+    available_weights = {
+        name: weight
+        for name, weight in configured_weights.items()
+        if factors[name] is not None and weight > 0.0
+    }
+    weight_sum = sum(available_weights.values())
+    if weight_sum == 0.0:
+        return {}
+    return {
+        name: round(weight / weight_sum, 12) for name, weight in sorted(available_weights.items())
+    }
+
+
+def _priority_score(
+    factors: OpportunityPriorityFactors,
+    risk_penalty: float,
+) -> float:
+    values = {
+        "frequency": factors.frequency,
+        "impact": factors.impact,
+        "confidence": factors.confidence,
+        "operational_effort": factors.operational_effort,
+        "predictability": factors.predictability,
+    }
+    positive_score = sum(
+        factors.effective_weights[name] * value
+        for name, value in values.items()
+        if value is not None and name in factors.effective_weights
+    )
+    observed_risk_penalty = 0.0
+    if factors.risk is not None:
+        observed_risk_penalty = risk_penalty * factors.risk
+    return round(max(0.0, min(1.0, positive_score - observed_risk_penalty)), 6)
 
 
 def _window(timestamp: datetime, size: timedelta) -> tuple[datetime, datetime]:

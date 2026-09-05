@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -37,6 +38,10 @@ _UNRESOLVED_CODES = {
     "FAILED",
     "UNKNOWN",
 }
+_IMPACT_SCORE_KEYS = ("impact_score", "customer_impact_score")
+_EFFORT_SCORE_KEYS = ("operational_effort_score", "effort_score")
+_PREDICTABILITY_SCORE_KEYS = ("predictability_score",)
+_RISK_SCORE_KEYS = ("risk_score", "safety_risk_score", "external_dependency_risk_score")
 
 
 class OpportunityDetectionConfig(ImmutableModel):
@@ -61,9 +66,6 @@ class _Candidate:
     title: str
     operation_mode: str
     signals: tuple[OperationalSignal, ...]
-    base_impact: float
-    base_effort: float
-    base_risk: float
     risk_factors: tuple[str, ...]
 
 
@@ -74,9 +76,6 @@ class _Detector:
     title: str
     extractor: Callable[[OperationalSignal], str | None]
     operation_mode: str
-    base_impact: float
-    base_effort: float
-    base_risk: float
     risk_factors: tuple[str, ...]
 
 
@@ -92,9 +91,6 @@ class OpportunityDiscoverer:
                 title="Repeated operation sequence",
                 extractor=self._sequence_key,
                 operation_mode="journey",
-                base_impact=0.65,
-                base_effort=0.7,
-                base_risk=0.15,
                 risk_factors=(),
             ),
             _Detector(
@@ -103,9 +99,6 @@ class OpportunityDiscoverer:
                 title="Repeated escalation cause",
                 extractor=self._escalation_key,
                 operation_mode="source",
-                base_impact=0.9,
-                base_effort=0.8,
-                base_risk=0.2,
                 risk_factors=("human_handoff_boundary",),
             ),
             _Detector(
@@ -114,9 +107,6 @@ class OpportunityDiscoverer:
                 title="Repeat contact after an unresolved path",
                 extractor=self._unresolved_key,
                 operation_mode="journey",
-                base_impact=0.9,
-                base_effort=0.75,
-                base_risk=0.2,
                 risk_factors=(),
             ),
             _Detector(
@@ -125,9 +115,6 @@ class OpportunityDiscoverer:
                 title="Repeated lookup operation",
                 extractor=self._lookup_key,
                 operation_mode="source",
-                base_impact=0.55,
-                base_effort=0.55,
-                base_risk=0.1,
                 risk_factors=(),
             ),
             _Detector(
@@ -136,9 +123,6 @@ class OpportunityDiscoverer:
                 title="Repeated approval wait",
                 extractor=self._approval_key,
                 operation_mode="source",
-                base_impact=0.7,
-                base_effort=0.65,
-                base_risk=0.25,
                 risk_factors=("approval_boundary",),
             ),
             _Detector(
@@ -147,9 +131,6 @@ class OpportunityDiscoverer:
                 title="Repeated policy denial",
                 extractor=self._policy_denial_key,
                 operation_mode="source",
-                base_impact=0.75,
-                base_effort=0.45,
-                base_risk=0.4,
                 risk_factors=("governance_boundary",),
             ),
             _Detector(
@@ -158,9 +139,6 @@ class OpportunityDiscoverer:
                 title="Repeated human workaround",
                 extractor=self._workaround_key,
                 operation_mode="journey",
-                base_impact=0.8,
-                base_effort=0.9,
-                base_risk=0.25,
                 risk_factors=("manual_workaround",),
             ),
             _Detector(
@@ -169,9 +147,6 @@ class OpportunityDiscoverer:
                 title="Repeated operator correction",
                 extractor=self._correction_key,
                 operation_mode="journey",
-                base_impact=0.8,
-                base_effort=0.85,
-                base_risk=0.2,
                 risk_factors=("human_correction_boundary",),
             ),
         )
@@ -217,9 +192,6 @@ class OpportunityDiscoverer:
                         title=detector.title,
                         operation_mode=detector.operation_mode,
                         signals=tuple(grouped_signals),
-                        base_impact=detector.base_impact,
-                        base_effort=detector.base_effort,
-                        base_risk=detector.base_risk,
                         risk_factors=detector.risk_factors,
                     )
                     opportunity = self._build_opportunity(
@@ -262,19 +234,10 @@ class OpportunityDiscoverer:
         frequency = float(len(occurrence_keys))
         quality = sum(_QUALITY_SCORE[signal.evidence_quality] for signal in signals) / len(signals)
         confidence = min(1.0, round(0.5 * quality + 0.5 * min(1.0, frequency / 4.0), 6))
-        impact = min(1.0, round(candidate.base_impact + 0.05 * max(0.0, frequency - 2.0), 6))
-        effort = min(1.0, round(candidate.base_effort + 0.03 * max(0.0, frequency - 2.0), 6))
-        predictability = min(1.0, round(0.55 + 0.1 * min(4.0, frequency) * quality, 6))
-        risk = min(
-            1.0,
-            round(
-                candidate.base_risk
-                + 0.15 * any(signal.evidence_quality is EvidenceQuality.STALE for signal in signals)
-                + 0.1
-                * any(signal.evidence_quality is EvidenceQuality.PARTIAL for signal in signals),
-                6,
-            ),
-        )
+        impact = _evidence_score(signals, _IMPACT_SCORE_KEYS)
+        effort = _evidence_score(signals, _EFFORT_SCORE_KEYS)
+        predictability = _evidence_score(signals, _PREDICTABILITY_SCORE_KEYS)
+        risk = _evidence_score(signals, _RISK_SCORE_KEYS)
         risk_factors = set(candidate.risk_factors)
         if any(signal.evidence_quality is EvidenceQuality.STALE for signal in signals):
             risk_factors.add("stale_evidence")
@@ -502,6 +465,22 @@ def _attribute_text(attributes: Mapping[str, Any], keys: Sequence[str]) -> str |
         if isinstance(value, str) and value.strip():
             return value
     return None
+
+
+def _evidence_score(signals: Sequence[OperationalSignal], keys: Sequence[str]) -> float | None:
+    """Aggregate an explicitly supplied normalized score, or preserve unknown."""
+
+    values: list[float] = []
+    for signal in signals:
+        for key in keys:
+            value = signal.normalized_attributes.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            score = float(value)
+            if math.isfinite(score) and 0.0 <= score <= 1.0:
+                values.append(score)
+                break
+    return None if not values else round(sum(values) / len(values), 6)
 
 
 def _string_sequence(value: object) -> tuple[str, ...] | None:

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, Field, JsonValue, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    Field,
+    JsonValue,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from .common import (
     ImmutableModel,
@@ -178,19 +186,19 @@ class Opportunity(ImmutableModel):
     source_signal_ids: tuple[str, ...] = Field(min_length=1)
     evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
     frequency_estimate: float = Field(ge=0.0)
-    impact_estimate: float = Field(ge=0.0)
     confidence: float = Field(ge=0.0, le=1.0)
     status: str = Field(min_length=1)
     created_at: datetime
+    impact_estimate: float | None = Field(default=None, ge=0.0, le=1.0)
     detector_name: str = "unspecified"
     pattern_type: OpportunityPattern = OpportunityPattern.REPEATED_LOOKUP
     pattern_key: str = "unspecified"
     window_start: datetime | None = None
     window_end: datetime | None = None
     occurrence_keys: tuple[str, ...] = ()
-    operational_effort_estimate: float = Field(default=0.0, ge=0.0)
-    predictability_estimate: float = Field(default=0.0, ge=0.0, le=1.0)
-    risk_estimate: float = Field(default=0.0, ge=0.0, le=1.0)
+    operational_effort_estimate: float | None = Field(default=None, ge=0.0, le=1.0)
+    predictability_estimate: float | None = Field(default=None, ge=0.0, le=1.0)
+    risk_estimate: float | None = Field(default=None, ge=0.0, le=1.0)
     risk_factors: tuple[str, ...] = ()
 
     @field_validator(
@@ -234,15 +242,83 @@ class Opportunity(ImmutableModel):
         return self
 
 
-class OpportunityPriorityFactors(ImmutableModel):
-    """Inspectable normalized factors used for cluster prioritization."""
+_PRIORITY_FACTOR_NAMES = (
+    "frequency",
+    "impact",
+    "confidence",
+    "operational_effort",
+    "predictability",
+    "risk",
+)
 
-    frequency: float = Field(ge=0.0, le=1.0)
-    impact: float = Field(ge=0.0, le=1.0)
-    confidence: float = Field(ge=0.0, le=1.0)
-    operational_effort: float = Field(ge=0.0, le=1.0)
-    predictability: float = Field(ge=0.0, le=1.0)
-    risk: float = Field(ge=0.0, le=1.0)
+
+class OpportunityPriorityFactors(ImmutableModel):
+    """Inspectable normalized factors used for cluster prioritization.
+
+    ``None`` means that the evidence does not support a factor. It is not a
+    zero score. The availability lists make that distinction explicit at the
+    persistence boundary.
+    """
+
+    frequency: float | None = Field(default=None, ge=0.0, le=1.0)
+    impact: float | None = Field(default=None, ge=0.0, le=1.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    operational_effort: float | None = Field(default=None, ge=0.0, le=1.0)
+    predictability: float | None = Field(default=None, ge=0.0, le=1.0)
+    risk: float | None = Field(default=None, ge=0.0, le=1.0)
+    available_factors: tuple[str, ...] = ()
+    unavailable_factors: tuple[str, ...] = ()
+    effective_weights: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("available_factors", "unavailable_factors")
+    @classmethod
+    def factor_names_are_known_and_unique(
+        cls, value: tuple[str, ...], info: object
+    ) -> tuple[str, ...]:
+        unique_values(value, getattr(info, "field_name", "factors"))
+        unknown = set(value).difference(_PRIORITY_FACTOR_NAMES)
+        if unknown:
+            raise ValueError(f"unknown prioritization factors: {sorted(unknown)}")
+        return value
+
+    @field_validator("effective_weights")
+    @classmethod
+    def effective_weights_are_bounded(cls, value: dict[str, float]) -> dict[str, float]:
+        unknown = set(value).difference(_PRIORITY_FACTOR_NAMES)
+        if unknown:
+            raise ValueError(f"unknown effective prioritization weights: {sorted(unknown)}")
+        if any(weight < 0.0 or weight > 1.0 for weight in value.values()):
+            raise ValueError("effective prioritization weights must be between 0 and 1")
+        return value
+
+    @field_serializer("effective_weights")
+    def serialize_effective_weights(self, value: Mapping[str, float]) -> dict[str, float]:
+        return dict(value)
+
+    @model_validator(mode="after")
+    def factor_availability_matches_values(self) -> "OpportunityPriorityFactors":
+        values = {name: getattr(self, name) for name in _PRIORITY_FACTOR_NAMES}
+        expected_available = tuple(
+            name for name in _PRIORITY_FACTOR_NAMES if values[name] is not None
+        )
+        expected_unavailable = tuple(
+            name for name in _PRIORITY_FACTOR_NAMES if values[name] is None
+        )
+        supplied = set(self.available_factors) | set(self.unavailable_factors)
+        if not supplied:
+            object.__setattr__(self, "available_factors", expected_available)
+            object.__setattr__(self, "unavailable_factors", expected_unavailable)
+        elif (
+            self.available_factors != expected_available
+            or self.unavailable_factors != expected_unavailable
+        ):
+            raise ValueError("factor availability must match nullable factor values")
+        if self.effective_weights:
+            if set(self.effective_weights).difference(self.available_factors):
+                raise ValueError("effective weights require available factors")
+            if abs(sum(self.effective_weights.values()) - 1.0) > 1e-6:
+                raise ValueError("effective prioritization weights must sum to 1")
+        return self
 
 
 class OpportunityCluster(ImmutableModel):
@@ -256,20 +332,13 @@ class OpportunityCluster(ImmutableModel):
     pattern_summary: str = Field(min_length=1)
     evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
     frequency: float = Field(ge=0.0)
-    impact: float = Field(ge=0.0)
+    impact: float | None = Field(default=None, ge=0.0, le=1.0)
     confidence: float = Field(ge=0.0, le=1.0)
     risk_factors: tuple[str, ...] = ()
     pattern_type: OpportunityPattern = OpportunityPattern.REPEATED_LOOKUP
     pattern_key: str = "unspecified"
     prioritization_factors: OpportunityPriorityFactors = Field(
-        default_factory=lambda: OpportunityPriorityFactors(
-            frequency=0.0,
-            impact=0.0,
-            confidence=0.0,
-            operational_effort=0.0,
-            predictability=0.0,
-            risk=0.0,
-        )
+        default_factory=OpportunityPriorityFactors
     )
     priority_score: float = Field(ge=0.0, le=1.0, default=0.0)
     priority_rank: int = Field(ge=1, default=1)

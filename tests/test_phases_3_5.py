@@ -146,10 +146,13 @@ def make_opportunity(
     created_at: datetime,
     pattern_key: str,
     pattern_type: OpportunityPattern = OpportunityPattern.REPEATED_LOOKUP,
-    impact: float = 0.8,
+    impact: float | None = None,
     confidence: float = 0.9,
     occurrence_keys: tuple[str, ...] = ("journey:one", "journey:two"),
     tenant_id: str = "tenant-a",
+    operational_effort: float | None = None,
+    predictability: float | None = None,
+    risk: float | None = None,
 ) -> Opportunity:
     return Opportunity(
         opportunity_id=opportunity_id,
@@ -169,14 +172,15 @@ def make_opportunity(
         window_start=created_at,
         window_end=created_at + timedelta(hours=1),
         occurrence_keys=occurrence_keys,
-        operational_effort_estimate=0.7,
-        predictability_estimate=0.8,
-        risk_estimate=0.1,
+        operational_effort_estimate=operational_effort,
+        predictability_estimate=predictability,
+        risk_estimate=risk,
     )
 
 
 def test_cx_adapter_requires_tenant_scope_and_preserves_trace_lineage() -> None:
     source = FakeCXPlatform()
+    source.events[0]["data"]["impact_score"] = 0.8
     with SQLiteStore() as store:
         adapter = CXPlatformEvidenceAdapter(source, tenant_id="tenant-a")
         first = adapter.ingest(store.signals, as_of=NOW + timedelta(days=1))
@@ -194,6 +198,12 @@ def test_cx_adapter_requires_tenant_scope_and_preserves_trace_lineage() -> None:
         }
         assert all(item.interaction_id and item.journey_id for item in event_signals)
         assert all("large_payload" not in item.normalized_attributes for item in event_signals)
+        assert (
+            next(
+                item for item in event_signals if item.source_record_id == "event-1"
+            ).normalized_attributes["impact_score"]
+            == 0.8
+        )
 
         other_tenant = CXPlatformEvidenceAdapter(source, tenant_id="tenant-b")
         other = other_tenant.ingest(store.signals, as_of=NOW + timedelta(days=1))
@@ -282,6 +292,52 @@ def test_all_initial_detectors_are_rule_based_and_duplicate_safe() -> None:
         discoverer.discover([signals[0], signals[0].model_copy(update={"signal_id": "other"})])
 
 
+def test_detectors_do_not_fabricate_unsupported_priority_factors() -> None:
+    signals = [make_signal(1), make_signal(2)]
+    lookup = next(
+        opportunity
+        for opportunity in OpportunityDiscoverer().discover(signals)
+        if opportunity.pattern_type is OpportunityPattern.REPEATED_LOOKUP
+    )
+
+    assert lookup.impact_estimate is None
+    assert lookup.operational_effort_estimate is None
+    assert lookup.predictability_estimate is None
+    assert lookup.risk_estimate is None
+
+    measured_signals = [
+        make_signal(
+            3,
+            pattern_attributes={
+                "tool_id": "get_transaction_history",
+                "impact_score": 0.8,
+                "operational_effort_score": 0.6,
+                "predictability_score": 0.7,
+                "risk_score": 0.2,
+            },
+        ),
+        make_signal(
+            4,
+            pattern_attributes={
+                "tool_id": "get_transaction_history",
+                "impact_score": 0.4,
+                "operational_effort_score": 0.2,
+                "predictability_score": 0.5,
+                "risk_score": 0.1,
+            },
+        ),
+    ]
+    measured_lookup = next(
+        opportunity
+        for opportunity in OpportunityDiscoverer().discover(measured_signals)
+        if opportunity.pattern_type is OpportunityPattern.REPEATED_LOOKUP
+    )
+    assert measured_lookup.impact_estimate == 0.6
+    assert measured_lookup.operational_effort_estimate == 0.4
+    assert measured_lookup.predictability_estimate == 0.6
+    assert measured_lookup.risk_estimate == 0.15
+
+
 def test_discovery_is_tenant_scoped_and_excludes_unreliable_evidence() -> None:
     signals = [
         make_signal(1),
@@ -344,6 +400,64 @@ def test_clustering_uses_half_open_boundaries_and_separate_factor_rank() -> None
     assert all(cluster.prioritization_factors.frequency >= 0 for cluster in clusters)
     assert all(cluster.priority_score >= 0 for cluster in clusters)
     assert sum(cluster.frequency for cluster in lookup_clusters) == 4
+
+
+def test_prioritization_renormalizes_weights_for_available_factors() -> None:
+    opportunity = make_opportunity(
+        "opportunity-unknown-factors",
+        created_at=NOW,
+        pattern_key="operation:lookup",
+        occurrence_keys=("journey:one", "journey:two", "journey:three"),
+    )
+    cluster = OpportunityClusterer().cluster([opportunity])[0]
+    factors = cluster.prioritization_factors
+
+    assert factors.impact is None
+    assert factors.operational_effort is None
+    assert factors.predictability is None
+    assert factors.risk is None
+    assert factors.available_factors == ("frequency", "confidence")
+    assert factors.unavailable_factors == (
+        "impact",
+        "operational_effort",
+        "predictability",
+        "risk",
+    )
+    assert factors.effective_weights == {
+        "confidence": 0.444444444444,
+        "frequency": 0.555555555556,
+    }
+    expected_score = (
+        factors.effective_weights["frequency"] * factors.frequency
+        + factors.effective_weights["confidence"] * factors.confidence
+    )
+    assert cluster.priority_score == round(expected_score, 6)
+    assert cluster.impact is None
+
+
+def test_observed_risk_is_penalized_but_unknown_risk_is_not_zero() -> None:
+    unknown = make_opportunity(
+        "opportunity-without-risk",
+        created_at=NOW,
+        pattern_key="operation:unknown-risk",
+    )
+    observed = make_opportunity(
+        "opportunity-with-risk",
+        created_at=NOW,
+        pattern_key="operation:observed-risk",
+        risk=0.5,
+    )
+    clusters = {
+        cluster.pattern_key: cluster
+        for cluster in OpportunityClusterer().cluster([unknown, observed])
+    }
+
+    assert clusters["operation:unknown-risk"].prioritization_factors.risk is None
+    assert clusters["operation:observed-risk"].prioritization_factors.risk == 0.5
+    assert (
+        clusters["operation:observed-risk"].priority_score
+        < clusters["operation:unknown-risk"].priority_score
+    )
 
 
 def test_cluster_round_trip_persists_factors_and_rank() -> None:

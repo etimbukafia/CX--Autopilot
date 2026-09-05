@@ -58,11 +58,20 @@ The initial detectors are deterministic and inspectable:
 - repeated operator correction.
 
 Each `Opportunity` records its detector, pattern key, fixed evidence window,
-source signal IDs, evidence references, occurrence keys, estimates, and risk
-factors. Detector input excludes `CONFLICTING` and `UNAVAILABLE` signals.
-Duplicate signals are removed by source identity before detection. Opportunity
-IDs are deterministic hashes of tenant, detector, pattern, window, and source
-identities.
+source signal IDs, evidence references, occurrence keys, supported estimates,
+and risk factors. Unsupported impact, operational effort, predictability, and
+risk estimates are `null`. A detector type never supplies a numeric prior.
+The discovery boundary can use an explicitly supplied normalized evidence score
+when a source provides one. It recognizes `impact_score`,
+`customer_impact_score`, `operational_effort_score`, `effort_score`,
+`predictability_score`, `risk_score`, `safety_risk_score`, and
+`external_dependency_risk_score` in normalized signal attributes. These values
+must be source-backed values in the range `[0, 1]`; invalid or missing values
+remain unknown. Qualitative `risk_factors` describe observed boundaries and do
+not create a numeric risk value. Detector input excludes `CONFLICTING` and
+`UNAVAILABLE` signals. Duplicate signals are removed by source identity before
+detection. Opportunity IDs are deterministic hashes of tenant, detector,
+pattern, window, and source identities.
 
 ## Clustering and prioritization
 
@@ -73,7 +82,9 @@ keys. Frequency is calculated from unique occurrence keys, so repeated source
 evidence does not inflate it.
 
 `OpportunityPriorityFactors` stores normalized factors separately from the
-final score and rank:
+final score and rank. A factor is `null` when the evidence does not support it.
+The record stores `available_factors`, `unavailable_factors`, and the effective
+weights used by the rank calculation.
 
 ```text
 frequency       0.25
@@ -84,7 +95,11 @@ predictability  0.15
 risk penalty    0.20
 ```
 
-The score is the weighted sum of the first five factors minus the risk
-penalty, clamped to `[0, 1]`. Ranks sort by score, then frequency, then
-impact, then deterministic cluster identity. SQLite persists both the factor
-record and the final score/rank in the existing immutable cluster repository.
+The configured weights for available positive factors are normalized before
+scoring. For example, if only frequency and confidence are available, their
+effective weights are `0.25 / 0.45` and `0.20 / 0.45`. An unavailable factor is
+not treated as zero. The risk penalty is applied only when observed risk is
+available. The score is clamped to `[0, 1]`. Ranks sort by score, then
+frequency, then known impact, then deterministic cluster identity. SQLite
+persists the factor record, effective weights, and final score/rank in the
+existing immutable cluster repository.
