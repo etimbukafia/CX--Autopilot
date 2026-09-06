@@ -468,6 +468,41 @@ def test_recommendation_requires_improved_evidence_and_contains_the_full_chain()
             )
 
 
+def test_recommendation_rejects_comparison_not_referenced_by_evaluation() -> None:
+    inventory, diagnosis, proposal, built, _ = _build_tool_candidate()
+    baseline = _baseline_reference()
+    evaluation = EvaluationReference(
+        evaluation_id="evaluation-comparison-match-1",
+        tenant_id="tenant-a",
+        baseline_candidate_id=baseline.candidate_id,
+        candidate_id=built.candidate_reference.candidate_id,
+        comparison_id="comparison-1",
+        status="EVALUATION_SUCCEEDED",
+        evidence_refs=("lab:comparison:1",),
+    )
+
+    with pytest.raises(RecommendationError, match="comparison does not match"):
+        PilotRecommender().recommend(
+            proposal=proposal,
+            diagnosis=diagnosis,
+            inventory=inventory,
+            candidate=built.candidate_reference,
+            evaluation=evaluation,
+            comparison=SimpleNamespace(comparison_id="comparison-2", verdict="improved"),
+            summary="Review a bounded transaction-history pilot.",
+            expected_operational_impact="Reduce repeated manual lookup work from evidence.",
+            known_risks=("Read authority remains policy governed.",),
+            pilot_scope={
+                "agent_ref": built.candidate_reference.agent_ref.identity,
+                "traffic_percentage": 5,
+            },
+            success_criteria=("Lookup completion improves.",),
+            rollback_conditions=("Abort on a safety regression.",),
+            cluster=cluster(),
+            risk_evidence_refs=("risk:comparison-match",),
+        )
+
+
 def test_decisions_persist_canonical_outcomes_and_audit_back_to_evidence() -> None:
     with SQLiteStore() as store:
         inventory, diagnosis, proposal, built, _ = _build_tool_candidate(store=store)

@@ -86,7 +86,12 @@ class PilotRecommender:
             "COMPLETED",
         }:
             raise RecommendationError("a successful Lab evaluation is required")
+        if evaluation_reference.comparison_id is None:
+            raise RecommendationError("evaluation must contain a Lab comparison reference")
         comparison_record = _comparison_record(comparison)
+        comparison_id = _optional_text(comparison_record, "comparison_id")
+        if comparison_id != evaluation_reference.comparison_id:
+            raise RecommendationError("comparison does not match the evaluation reference")
         if _comparison_verdict(comparison_record) != "improved":
             raise RecommendationError("an improved Lab comparison is required for a pilot")
         _validate_candidate_graph(proposal, candidate_reference)
@@ -111,7 +116,6 @@ class PilotRecommender:
         rollback = _text_values(rollback_conditions, "rollback_conditions", required=True)
         recommendation_time = aware_timestamp(created_at or datetime.now(UTC), "created_at")
 
-        comparison_id = _optional_text(comparison_record, "comparison_id") or "unspecified"
         evidence = _append_evidence(
             *source_evidence,
             *risk_evidence,
