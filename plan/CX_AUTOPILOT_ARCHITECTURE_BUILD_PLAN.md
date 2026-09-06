@@ -1630,32 +1630,36 @@ Every terminal decision can be traced from source evidence through derived recor
 
 Prove the full architecture with one realistic Agent/Tool/Skill/Prompt change case.
 
+Status: complete. The deterministic reference slice and public-behavior
+acceptance test prove the transaction-history Tool-change path through human
+decision.
+
 ### Scenario
 
 Repeated transaction-history lookup.
 
 ### Required assertions
 
-- [ ] CX evidence is ingested with stable source references.
-- [ ] Duplicate ingestion does not duplicate signals.
-- [ ] Evidence is correlated into the relevant journey.
-- [ ] Repeated lookup pattern becomes one opportunity cluster.
-- [ ] Current support-agent inventory is inspected.
-- [ ] Existing relevant payment skill is detected.
-- [ ] Missing `get_transaction_history` executable authority is detected.
-- [ ] Diagnosis is `TOOL_GAP`.
-- [ ] Change target is `TOOL`.
-- [ ] Strategy is `EXTEND`.
-- [ ] Proposal adds the exact tool reference and no unnecessary component.
-- [ ] No new SkillDefinition is created unless the existing skill dependency actually requires a change.
-- [ ] Harness builds an evaluation-scoped governed candidate.
-- [ ] Proposal intent matches the resolved manifest.
-- [ ] Lab evaluates baseline and candidate.
-- [ ] Autopilot receives exact evaluation/comparison evidence references.
-- [ ] Autopilot creates a pilot recommendation.
-- [ ] Human approval is required.
-- [ ] No production deployment occurs.
-- [ ] Production agent authority remains unchanged after the full test.
+- [x] CX evidence is ingested with stable source references.
+- [x] Duplicate ingestion does not duplicate signals.
+- [x] Evidence is correlated into the relevant journey.
+- [x] Repeated lookup pattern becomes one opportunity cluster.
+- [x] Current support-agent inventory is inspected.
+- [x] Existing relevant payment skill is detected.
+- [x] Missing `get_transaction_history` executable authority is detected.
+- [x] Diagnosis is `TOOL_GAP`.
+- [x] Change target is `TOOL`.
+- [x] Strategy is `EXTEND`.
+- [x] Proposal adds the exact tool reference and no unnecessary component.
+- [x] No new SkillDefinition is created unless the existing skill dependency actually requires a change.
+- [x] Harness builds an evaluation-scoped governed candidate.
+- [x] Proposal intent matches the resolved manifest.
+- [x] Lab evaluates baseline and candidate.
+- [x] Autopilot receives exact evaluation/comparison evidence references.
+- [x] Autopilot creates a pilot recommendation.
+- [x] Human approval is required.
+- [x] No production deployment occurs.
+- [x] Production agent authority remains unchanged after the full test.
 
 ### Exit criteria
 
@@ -1668,6 +1672,9 @@ The complete reference slice runs deterministically in tests and proves the gove
 ### Goal
 
 Prove that Autopilot distinguishes Agent, Tool, Skill, and Prompt change cases from external or governance causes and knows when not to build a candidate.
+
+Status: complete. Public-behavior tests cover all component-gap and terminal
+no-change cases.
 
 ### AGENT_GAP
 
@@ -1782,19 +1789,22 @@ Autopilot proves that:
 
 Make the system inspectable and runnable without adding unnecessary product surface.
 
+Status: complete. The implementation guide and intentionally small reference
+CLI cover the planned workflow and lineage inspection commands.
+
 ### Tasks
 
-- [ ] Document architecture and ownership boundaries.
-- [ ] Document Agent/Tool/Skill/Prompt change scope.
-- [ ] Document core domain contracts.
-- [ ] Document evidence lineage.
-- [ ] Document evidence-quality semantics.
-- [ ] Document diagnosis taxonomy and precedence.
-- [ ] Document change-target semantics.
-- [ ] Document change-strategy semantics.
-- [ ] Document Harness and Lab integration contracts.
-- [ ] Document the no-change/disposition branch.
-- [ ] Add a small CLI for local reference workflows and audit inspection.
+- [x] Document architecture and ownership boundaries.
+- [x] Document Agent/Tool/Skill/Prompt change scope.
+- [x] Document core domain contracts.
+- [x] Document evidence lineage.
+- [x] Document evidence-quality semantics.
+- [x] Document diagnosis taxonomy and precedence.
+- [x] Document change-target semantics.
+- [x] Document change-strategy semantics.
+- [x] Document Harness and Lab integration contracts.
+- [x] Document the no-change/disposition branch.
+- [x] Add a small CLI for local reference workflows and audit inspection.
 
 ### CLI scope
 
@@ -1826,6 +1836,9 @@ A reviewer can understand, run, and inspect the reference workflow from reposito
 
 Finish with one clean architecture and no duplicate Harness/Lab logic or obsolete scaffolding.
 
+Status: complete. The final repository review and quality gate are recorded in
+`docs/PHASE_14_17_IMPLEMENTATION.md`.
+
 ### Required checks
 
 Run the repository-configured equivalents of:
@@ -1843,16 +1856,16 @@ Adjust only when repository configuration requires a different exact command.
 
 ### Cleanup
 
-- [ ] Remove unused abstractions.
-- [ ] Remove placeholder adapters.
-- [ ] Remove duplicated taxonomy logic.
-- [ ] Remove dead compatibility code.
-- [ ] Confirm current plans and docs match implementation.
-- [ ] Manually review for copied Harness runtime/governance logic.
-- [ ] Manually review for copied Improvement Lab evaluation/root-cause/comparison/promotion logic.
-- [ ] Confirm no code path can turn a diagnosis or recommendation directly into production deployment.
-- [ ] Confirm no code path can infer tool authority from Skill dependencies.
-- [ ] Confirm no code path can infer skill selection without an authoritative signal.
+- [x] Remove unused abstractions.
+- [x] Remove placeholder adapters.
+- [x] Remove duplicated taxonomy logic.
+- [x] Remove dead compatibility code.
+- [x] Confirm current plans and docs match implementation.
+- [x] Manually review for copied Harness runtime/governance logic.
+- [x] Manually review for copied Improvement Lab evaluation/root-cause/comparison/promotion logic.
+- [x] Confirm no code path can turn a diagnosis or recommendation directly into production deployment.
+- [x] Confirm no code path can infer tool authority from Skill dependencies.
+- [x] Confirm no code path can infer skill selection without an authoritative signal.
 
 ### Exit criteria
 

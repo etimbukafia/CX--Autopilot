@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11,<3.15"
 dependencies = ["pydantic>=2.7,<3"]
 
+[project.scripts]
+cx-autopilot = "cx_autopilot.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "mypy>=1.11,<2",

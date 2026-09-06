@@ -28,6 +28,9 @@ pipeline, and the Phase 6–9 governed inventory, diagnosis, eligibility,
 strategy, and exact proposal boundaries, and the Phase 10-13 candidate,
 evaluation, recommendation, decision, and audit boundaries.
 
+The completed reference acceptance, taxonomy, CLI, documentation, and quality
+gate for Phases 14-17 are described below.
+
 Phase 3–5 semantics are documented in
 [`docs/PHASE_3_5_IMPLEMENTATION.md`](docs/PHASE_3_5_IMPLEMENTATION.md).
 
@@ -36,6 +39,15 @@ Phases 6–9 semantics are documented in
 
 Phases 10-13 semantics are documented in
 [`docs/PHASE_10_13_IMPLEMENTATION.md`](docs/PHASE_10_13_IMPLEMENTATION.md).
+
+Phases 14-17 semantics are documented in
+[`docs/PHASE_14_17_IMPLEMENTATION.md`](docs/PHASE_14_17_IMPLEMENTATION.md).
+
+The deterministic reference cycle can be run with:
+
+```text
+python -m cx_autopilot --db .cx-autopilot.sqlite run reference cycle
+```
 
 ## Development
 

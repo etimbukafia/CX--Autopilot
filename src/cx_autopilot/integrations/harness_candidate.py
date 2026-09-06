@@ -214,38 +214,6 @@ class HarnessCandidateAdapter:
             agent_config=config,
         )
 
-    def construct_candidate(
-        self,
-        proposal: ChangeProposal | OperationalDisposition,
-        inventory: AgentSystemInventorySnapshot,
-        baseline_agent_config: object,
-        **kwargs: object,
-    ) -> HarnessCandidateBuild:
-        """Explicitly named alias for the candidate construction boundary."""
-
-        return self.construct(
-            proposal,
-            inventory,
-            baseline_agent_config,
-            **cast(dict[str, Any], kwargs),
-        )
-
-    def build_candidate(
-        self,
-        proposal: ChangeProposal | OperationalDisposition,
-        inventory: AgentSystemInventorySnapshot,
-        baseline_agent_config: object,
-        **kwargs: object,
-    ) -> HarnessCandidateBuild:
-        """Build one candidate using the adapter's explicit public name."""
-
-        return self.construct_candidate(
-            proposal,
-            inventory,
-            baseline_agent_config,
-            **kwargs,
-        )
-
 
 def _config_graph(config: object, source_system: str) -> _AgentGraph:
     raw_identity = _field(config, "identity")

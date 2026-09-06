@@ -79,12 +79,7 @@ class PilotRecommender:
             raise RecommendationError("evaluation reference tenant does not match proposal")
         if evaluation_reference.candidate_id != candidate_reference.candidate_id:
             raise RecommendationError("evaluation does not refer to the supplied candidate")
-        if evaluation_reference.status.upper() not in {
-            "EVALUATION_SUCCEEDED",
-            "SUCCEEDED",
-            "PASSED",
-            "COMPLETED",
-        }:
+        if evaluation_reference.status != "EVALUATION_SUCCEEDED":
             raise RecommendationError("a successful Lab evaluation is required")
         if evaluation_reference.comparison_id is None:
             raise RecommendationError("evaluation must contain a Lab comparison reference")
