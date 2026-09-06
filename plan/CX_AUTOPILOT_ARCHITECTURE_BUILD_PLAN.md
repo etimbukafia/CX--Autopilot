@@ -514,6 +514,9 @@ NO_CHANGE
 ```
 
 Every operation must state the exact baseline component reference and the intended target relationship.
+When an Agent owns an exact Prompt or Skill reference, changing that
+component also requires the proposal to state the Agent's exact before and
+after versions and every removed and added composition edge.
 
 A Skill change must not imply agent tool authority.
 
@@ -1481,6 +1484,11 @@ ADD_SKILL_OPTIONAL_TOOL_REF
 ```
 
 That skill change must produce a new exact skill version.
+If the baseline Agent references the old Skill version, the proposal must also
+remove the old Agent-to-Skill edge and add the new exact Agent-to-Skill edge.
+
+Likewise, a Prompt reference change must state the exact Prompt and Agent
+before/after references in `CHANGE_AGENT_PROMPT_REF`.
 
 Do not create a new Agent, Skill, or Prompt for this reference case unless evidence proves it is necessary.
 

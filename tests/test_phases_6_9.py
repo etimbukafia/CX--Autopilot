@@ -559,7 +559,7 @@ def test_transaction_history_produces_one_exact_tool_authority_operation() -> No
         ChangePlanner().plan(diagnosis, inventory, required_tool_ref=transaction_tool)
 
 
-def test_skill_dependency_change_is_explicit_and_never_agent_authority() -> None:
+def test_skill_dependency_change_updates_agent_graph_without_tool_authority() -> None:
     inventory, _, _ = inventory_graph()
     agent = ref(ComponentType.AGENT, "support-agent")
     skill = ref(ComponentType.SKILL, "payment-skill")
@@ -575,6 +575,7 @@ def test_skill_dependency_change_is_explicit_and_never_agent_authority() -> None
     proposal = ChangePlanner().plan(
         diagnosis,
         inventory,
+        target_agent_after_ref=ref(ComponentType.AGENT, "support-agent", "1.1.0"),
         required_skill_ref=skill,
         skill_after_ref=updated_skill,
         required_tool_ref=transaction_tool,
@@ -584,22 +585,65 @@ def test_skill_dependency_change_is_explicit_and_never_agent_authority() -> None
     assert [
         change.operation
         for change in proposal.proposed_component_changes  # type: ignore[union-attr]
-    ] == [ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF]
-    change = proposal.proposed_component_changes[0]  # type: ignore[union-attr]
-    assert change.subject_before_ref == skill
-    assert change.subject_after_ref == updated_skill
-    assert change.related_after_ref == transaction_tool
+    ] == [
+        ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
+        ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
+        ComponentChangeOperation.ADD_AGENT_SKILL_REF,
+    ]
+    dependency_change = proposal.proposed_component_changes[0]  # type: ignore[union-attr]
+    assert dependency_change.subject_before_ref == skill
+    assert dependency_change.subject_after_ref == updated_skill
+    assert dependency_change.related_after_ref == transaction_tool
+    remove_change = proposal.proposed_component_changes[1]  # type: ignore[union-attr]
+    add_change = proposal.proposed_component_changes[2]  # type: ignore[union-attr]
+    updated_agent = ref(ComponentType.AGENT, "support-agent", "1.1.0")
+    assert remove_change.subject_before_ref == agent
+    assert remove_change.subject_after_ref == updated_agent
+    assert remove_change.related_before_ref == skill
+    assert add_change.subject_before_ref == agent
+    assert add_change.subject_after_ref == updated_agent
+    assert add_change.related_after_ref == updated_skill
     assert not any(
-        ref.component_type is ComponentType.AGENT
+        change.operation
+        in {
+            ComponentChangeOperation.ADD_AGENT_TOOL_REF,
+            ComponentChangeOperation.REMOVE_AGENT_TOOL_REF,
+        }
         for change in proposal.proposed_component_changes  # type: ignore[union-attr]
-        for ref in (
-            change.subject_before_ref,
-            change.subject_after_ref,
-            change.related_before_ref,
-            change.related_after_ref,
-        )
-        if ref is not None
     )
+
+
+def test_prompt_change_versions_the_agent_with_the_new_prompt_reference() -> None:
+    inventory, _, _ = inventory_graph(agent_tools=(harness_ref("tool", "get_payment"),))
+    agent = ref(ComponentType.AGENT, "support-agent")
+    prompt = ref(ComponentType.PROMPT, "support-prompt")
+    updated_agent = ref(ComponentType.AGENT, "support-agent", "1.1.0")
+    updated_prompt = ref(ComponentType.PROMPT, "support-prompt", "1.1.0")
+    diagnosis = diagnose(
+        {"prompt_gap": True},
+        inventory=inventory,
+        target_agent_ref=agent,
+        required_prompt_ref=prompt,
+    )
+
+    proposal = ChangePlanner().plan(
+        diagnosis,
+        inventory,
+        target_agent_after_ref=updated_agent,
+        required_prompt_ref=prompt,
+        prompt_after_ref=updated_prompt,
+    )
+
+    assert proposal.change_target is ChangeTarget.PROMPT  # type: ignore[union-attr]
+    assert proposal.strategy is ChangeStrategy.EXTEND  # type: ignore[union-attr]
+    assert len(proposal.proposed_component_changes) == 1  # type: ignore[union-attr]
+    change = proposal.proposed_component_changes[0]  # type: ignore[union-attr]
+    assert change.operation is ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF
+    assert change.subject_before_ref == prompt
+    assert change.subject_after_ref == updated_prompt
+    assert change.related_before_ref == agent
+    assert change.related_after_ref == updated_agent
+    assert proposal.target_agent_refs == (agent, updated_agent)  # type: ignore[union-attr]
 
 
 def test_create_tool_path_declares_creation_and_authority_separately() -> None:

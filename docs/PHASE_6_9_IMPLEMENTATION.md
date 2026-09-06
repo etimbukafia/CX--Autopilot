@@ -96,11 +96,17 @@ related_after_ref  = get_transaction_history@1.0.0
 The Tool authority operation is separate from any Skill dependency operation.
 A Skill dependency mutation instead uses
 `ADD_SKILL_REQUIRED_TOOL_REF` or `ADD_SKILL_OPTIONAL_TOOL_REF` with an exact
-before/after Skill identity. Prompt changes use
-`CHANGE_AGENT_PROMPT_REF` and do not grant Tool authority. Creation and
-relationship operations are separate when both are needed. Proposals always
-require human review and reject operations whose target or undeclared Agent
-relationship is inconsistent.
+before/after Skill identity. When the baseline Agent has the old exact Skill
+reference, the proposal also contains `REMOVE_AGENT_SKILL_REF` for the old
+reference and `ADD_AGENT_SKILL_REF` for the new reference. Both operations
+carry the Agent's exact before/after versions.
+
+Prompt changes use `CHANGE_AGENT_PROMPT_REF`. The operation carries both the
+Prompt before/after references and the Agent before/after references. Prompt
+changes do not grant Tool authority. Creation and relationship operations are
+separate when both are needed. Proposals always require human review and
+reject operations whose target or undeclared Agent relationship is
+inconsistent.
 
 The next phase may translate a validated proposal into a Harness evaluation
 candidate. That construction is deliberately not implemented here.

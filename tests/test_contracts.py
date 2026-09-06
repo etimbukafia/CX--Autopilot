@@ -381,9 +381,20 @@ def test_component_changes_require_exact_before_after_references() -> None:
         subject_before_ref=ref(ComponentType.PROMPT, "support-prompt"),
         subject_after_ref=ref(ComponentType.PROMPT, "support-prompt", "1.1.0"),
         related_before_ref=agent,
+        related_after_ref=updated_agent,
         rationale="Replace the prompt with its exact new version.",
     )
     assert prompt_change.related_before_ref == agent
+    assert prompt_change.related_after_ref == updated_agent
+
+    with pytest.raises(ValidationError):
+        ComponentChange(
+            operation=ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF,
+            subject_before_ref=ref(ComponentType.PROMPT, "support-prompt"),
+            subject_after_ref=ref(ComponentType.PROMPT, "support-prompt", "1.1.0"),
+            related_before_ref=agent,
+            rationale="A Prompt change needs the exact resulting Agent identity.",
+        )
 
     skill_change = ComponentChange(
         operation=ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,

@@ -697,9 +697,7 @@ class ComponentChange(ImmutableModel):
                 self._require_related_remove(ComponentType.SKILL)
         elif operation is ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF:
             self._require_subject_transition(ComponentType.PROMPT)
-            _require_ref_type(self.related_before_ref, ComponentType.AGENT, "related_before_ref")
-            if self.related_after_ref is not None:
-                _require_ref_type(self.related_after_ref, ComponentType.AGENT, "related_after_ref")
+            self._require_related_transition(ComponentType.AGENT)
         elif operation in {
             ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
             ComponentChangeOperation.ADD_SKILL_OPTIONAL_TOOL_REF,
@@ -734,6 +732,12 @@ class ComponentChange(ImmutableModel):
         _require_ref_type(self.related_before_ref, expected, "related_before_ref")
         if self.related_after_ref is not None:
             raise ValueError("remove operations must not have related_after_ref")
+
+    def _require_related_transition(self, expected: ComponentType) -> None:
+        before = _require_ref_type(self.related_before_ref, expected, "related_before_ref")
+        after = _require_ref_type(self.related_after_ref, expected, "related_after_ref")
+        if before.identity == after.identity:
+            raise ValueError("related_before_ref and related_after_ref must differ")
 
 
 ProposedComponentChange = ComponentChange

@@ -277,6 +277,7 @@ class ChangePlanner:
                 strategy,
                 checked_inventory,
                 exact_agent,
+                exact_agent_after,
                 prompt,
                 prompt_after_ref,
             )
@@ -408,7 +409,7 @@ class ChangePlanner:
                 if dependency == "required"
                 else ComponentChangeOperation.ADD_SKILL_OPTIONAL_TOOL_REF
             )
-            return (
+            operations: list[ComponentChange] = [
                 ComponentChange(
                     operation=operation,
                     subject_before_ref=exact_skill,
@@ -416,7 +417,25 @@ class ChangePlanner:
                     related_after_ref=tool,
                     rationale="Version the Skill and record its exact Tool dependency.",
                 ),
-            )
+            ]
+            if agent is not None and _agent_has_skill(inventory, agent, exact_skill):
+                before_agent = _required_before(agent, ComponentType.AGENT)
+                after_agent = _required_after(agent_after, ComponentType.AGENT)
+                operations.extend(
+                    (
+                        self._agent_skill_remove_change(
+                            before_agent,
+                            after_agent,
+                            exact_skill,
+                        ),
+                        self._agent_skill_change(
+                            before_agent,
+                            after_agent,
+                            _required_after(new_skill, ComponentType.SKILL),
+                        ),
+                    )
+                )
+            return tuple(operations)
         if strategy is ChangeStrategy.EXTEND:
             return (
                 self._agent_skill_change(
@@ -453,11 +472,13 @@ class ChangePlanner:
         strategy: ChangeStrategy,
         inventory: AgentSystemInventorySnapshot,
         agent: ExactComponentReference | None,
+        agent_after: ExactComponentReference | None,
         prompt: ExactComponentReference | None,
         prompt_after: ExactComponentReference | None,
     ) -> tuple[ComponentChange, ...]:
         exact_prompt = _required_ref(prompt, ComponentType.PROMPT, "required_prompt_ref")
         exact_agent = _required_before(agent, ComponentType.AGENT)
+        exact_agent_after = _required_after(agent_after, ComponentType.AGENT)
         new_prompt = _validate_after_ref(
             prompt_after,
             ComponentType.PROMPT,
@@ -479,7 +500,8 @@ class ChangePlanner:
                 subject_before_ref=exact_prompt,
                 subject_after_ref=_required_after(new_prompt, ComponentType.PROMPT),
                 related_before_ref=exact_agent,
-                rationale="Change only the Agent's explicit Prompt reference.",
+                related_after_ref=exact_agent_after,
+                rationale="Version the Agent with its exact new Prompt reference.",
             )
         )
         return tuple(operations)
@@ -510,6 +532,20 @@ class ChangePlanner:
             subject_after_ref=agent_after,
             related_after_ref=skill,
             rationale="Add the exact Skill to the Agent composition explicitly.",
+        )
+
+    @staticmethod
+    def _agent_skill_remove_change(
+        agent: ExactComponentReference,
+        agent_after: ExactComponentReference,
+        skill: ExactComponentReference,
+    ) -> ComponentChange:
+        return ComponentChange(
+            operation=ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
+            subject_before_ref=agent,
+            subject_after_ref=agent_after,
+            related_before_ref=skill,
+            rationale="Remove the old exact Skill reference from the versioned Agent.",
         )
 
     @staticmethod
@@ -669,6 +705,17 @@ def _skill_satisfies(
         for edge in inventory.agent_to_skill_edges
     )
     return dependency and attached
+
+
+def _agent_has_skill(
+    inventory: AgentSystemInventorySnapshot,
+    agent: ExactComponentReference,
+    skill: ExactComponentReference,
+) -> bool:
+    return any(
+        edge.agent_ref.identity == agent.identity and edge.skill_ref.identity == skill.identity
+        for edge in inventory.agent_to_skill_edges
+    )
 
 
 def _coalesce_ref(
