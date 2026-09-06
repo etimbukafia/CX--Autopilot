@@ -94,6 +94,28 @@ The reference test snapshots production authority before and after candidate
 construction. The snapshots are equal and no deployment call is available in
 the fixture path.
 
+## Audit corrections
+
+Diagnosis now has a storage-backed `diagnose_cluster()` boundary. It resolves
+the cluster opportunities, verifies their exact source-signal and evidence
+lineage, fetches only those signal IDs, and fails closed when a contributing
+record is missing or outside the tenant. Direct diagnosis also rejects signal
+IDs and evidence references that are not declared by the cluster.
+
+`DiagnosticFactKey` is the shared normalized-fact vocabulary for the CX event
+adapter and diagnosis guards. The event adapter preserves diagnostic facts
+from both the event envelope and its data payload. It also preserves the
+authoritative event type so known outage, denial, approval, and knowledge
+events can participate in diagnosis precedence.
+
+Harness candidate references now bind the proposal, baseline inventory
+snapshot, and a digest of the complete resolved Agent graph. The same graph
+intent validator runs after candidate construction and before a pilot
+recommendation. It compares the exact Agent, Prompt, Skill, direct Tool
+authority, and Policy sets after applying every proposal operation. Lab
+evaluation references preserve the same binding, so an improved comparison
+cannot authorize an unrelated or incomplete candidate graph.
+
 ## Phase 15: taxonomy and no-change cases
 
 `tests/test_phases_14_17.py` covers the secondary boundaries:

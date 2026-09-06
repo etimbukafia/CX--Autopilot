@@ -124,6 +124,7 @@ def core_records() -> tuple[object, ...]:
         window_start=NOW,
         window_end=NOW,
         opportunity_ids=(opportunity.opportunity_id,),
+        source_signal_ids=opportunity.source_signal_ids,
         pattern_summary="Repeated transaction history lookup failures.",
         evidence_refs=("evidence:event-1",),
         frequency=4.0,

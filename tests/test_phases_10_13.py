@@ -180,6 +180,9 @@ def test_harness_candidate_preserves_manifest_provenance_and_never_touches_produ
     assert result.candidate_reference.tool_refs[-1].identity == (
         "TOOL:get_transaction_history@1.0.0"
     )
+    assert result.candidate_reference.proposal_id == proposal.proposal_id
+    assert result.candidate_reference.baseline_inventory_snapshot_id == inventory.snapshot_id
+    assert result.candidate_reference.resolved_graph_digest
     assert factory.calls[0]["dry_run"] is False
     assert factory.calls[0]["activate"] is True
     assert factory.calls[0]["register"] is True
@@ -350,6 +353,15 @@ def test_lab_adapter_calls_runner_twice_and_preserves_comparison_inputs() -> Non
     assert comparator.calls[0]["candidate_manifest"] is built.manifest
     assert result.evaluation_reference.status == "EVALUATION_SUCCEEDED"
     assert result.evaluation_reference.comparison_id == "comparison-1"
+    assert result.evaluation_reference.proposal_id == built.candidate_reference.proposal_id
+    assert (
+        result.evaluation_reference.baseline_inventory_snapshot_id
+        == built.candidate_reference.baseline_inventory_snapshot_id
+    )
+    assert (
+        result.evaluation_reference.resolved_graph_digest
+        == built.candidate_reference.resolved_graph_digest
+    )
     assert "case:payment-1" in result.evaluation_reference.evidence_refs
     assert "harness:digest:digest-candidate-1" in result.evaluation_reference.evidence_refs
 
@@ -407,6 +419,9 @@ def test_recommendation_requires_improved_evidence_and_contains_the_full_chain()
             comparison_id="comparison-recommendation-1",
             status="EVALUATION_SUCCEEDED",
             evidence_refs=("lab:evaluation:1", "lab:comparison:1"),
+            proposal_id=proposal.proposal_id,
+            baseline_inventory_snapshot_id=inventory.snapshot_id,
+            resolved_graph_digest=built.candidate_reference.resolved_graph_digest,
         )
         comparison = SimpleNamespace(
             comparison_id="comparison-recommendation-1", verdict="improved"
@@ -525,6 +540,9 @@ def test_decisions_persist_canonical_outcomes_and_audit_back_to_evidence() -> No
                 comparison_id="comparison-decision-1",
                 status="EVALUATION_SUCCEEDED",
                 evidence_refs=("lab:comparison:decision",),
+                proposal_id=proposal.proposal_id,
+                baseline_inventory_snapshot_id=inventory.snapshot_id,
+                resolved_graph_digest=built.candidate_reference.resolved_graph_digest,
             ),
             comparison=SimpleNamespace(comparison_id="comparison-decision-1", verdict="improved"),
             summary="Review a bounded pilot.",

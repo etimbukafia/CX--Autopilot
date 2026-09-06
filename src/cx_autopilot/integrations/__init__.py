@@ -14,6 +14,8 @@ from .harness_candidate import (
     HarnessCandidateBuild,
     HarnessCandidateError,
     HarnessFactoryPort,
+    graph_digest,
+    validate_candidate_graph,
 )
 from .improvement_lab import (
     EVALUATION_FAILED,
@@ -39,6 +41,8 @@ __all__ = [
     "HarnessCandidateBuild",
     "HarnessCandidateError",
     "HarnessFactoryPort",
+    "graph_digest",
+    "validate_candidate_graph",
     "EVALUATION_FAILED",
     "EVALUATION_SUCCEEDED",
     "ImprovementLabEvaluationAdapter",

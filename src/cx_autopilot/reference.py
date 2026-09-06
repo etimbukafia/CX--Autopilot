@@ -417,9 +417,13 @@ def run_reference_cycle(
     store.inventory.insert(inventory)
     lookup_opportunity = lookup_opportunities[0]
     cluster = clusters[0]
-    diagnosis = OperationalDiagnoser().diagnose(
-        cluster,
-        ingestion.signals,
+    diagnosis = OperationalDiagnoser(
+        cluster_store=store.opportunity_clusters,
+        opportunity_store=store.opportunities,
+        signal_store=store.signals,
+    ).diagnose_cluster(
+        cluster.cluster_id,
+        tenant,
         inventory,
         target_agent_ref=REFERENCE_AGENT,
         required_tool_ref=REFERENCE_TRANSACTION_TOOL,

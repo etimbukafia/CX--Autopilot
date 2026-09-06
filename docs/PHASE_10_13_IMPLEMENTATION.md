@@ -25,8 +25,10 @@ The adapter sends the resulting configuration to Harness with registration
 and activation enabled in the evaluation scope. It then checks the resolved
 manifest ID, digest, registry snapshot, Agent identity, Prompt reference,
 Skill references, Tool references, and Policy references. A mismatch fails
-construction. Only `CandidateReference` and the opaque built result are
-returned to the caller; production state is not called.
+construction. The provider-neutral graph validator also binds the resulting
+graph to the proposal and baseline inventory snapshot with a stable graph
+digest. Only `CandidateReference` and the opaque built result are returned to
+the caller; production state is not called.
 
 ## Phase 11: Improvement Lab evaluation
 
@@ -38,7 +40,8 @@ with both reports and their provenance.
 
 The adapter does not implement evaluators, failure taxonomy, root-cause
 analysis, comparison, or promotion logic. It preserves explicit Lab evidence
-references and manifest provenance in `EvaluationReference`.
+references, manifest provenance, and the candidate graph binding in
+`EvaluationReference`.
 
 If either run or the comparison fails, the result is terminal
 `EVALUATION_FAILED`. The adapter does not retry, edit the candidate, or start
@@ -59,10 +62,11 @@ Opportunity or cluster
   → explicit risk evidence
 ```
 
-It accepts a recommendation only when the evaluation succeeded and the Lab
-comparison verdict is `improved`. Expected operational impact, known risks,
-operational evidence, and risk evidence are supplied by the caller. The
-recommender does not invent impact or risk values.
+It accepts a recommendation only when the evaluation succeeded, the Lab
+comparison verdict is `improved`, and the complete candidate graph matches the
+proposal applied to the baseline inventory. Expected operational impact,
+known risks, operational evidence, and risk evidence are supplied by the
+caller. The recommender does not invent impact or risk values.
 
 The pilot scope must name the exact candidate Agent and contain a finite
 positive traffic, case, interaction, or time bound. Success criteria and

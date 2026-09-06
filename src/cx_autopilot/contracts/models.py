@@ -86,6 +86,100 @@ class EvidenceQuality(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+class DiagnosticFactKey(StrEnum):
+    """Normalized fact keys shared by CX adapters and diagnosis guards."""
+
+    EVENT_TYPE = "event_type"
+    ACTION_DIGEST = "action_digest"
+    AGENT_VERSION = "agent_version"
+    APPROVAL_ID = "approval_id"
+    ACTION_SEQUENCE = "action_sequence"
+    BUSINESS_OPERATION = "business_operation"
+    CALL_ID = "call_id"
+    CAUSE = "cause"
+    CUSTOMER_IMPACT_SCORE = "customer_impact_score"
+    CORRECTION_TYPE = "correction_type"
+    ERROR_CODE = "error_code"
+    ESCALATION_ID = "escalation_id"
+    EVIDENCE_IDS = "evidence_ids"
+    EFFORT_SCORE = "effort_score"
+    EXTERNAL_DEPENDENCY_RISK_SCORE = "external_dependency_risk_score"
+    HARNESS_REQUEST_ID = "harness_request_id"
+    HUMAN_WORKAROUND = "human_workaround"
+    IMPACT_SCORE = "impact_score"
+    LOOKUP_TYPE = "lookup_type"
+    MANUAL_ACTION = "manual_action"
+    OPERATION = "operation"
+    OPERATION_SEQUENCE = "operation_sequence"
+    OPERATOR_ACTION = "operator_action"
+    OPERATOR_CORRECTION = "operator_correction"
+    OUTCOME_ID = "outcome_id"
+    OUTCOME_STATUS = "outcome_status"
+    OPERATIONAL_EFFORT_SCORE = "operational_effort_score"
+    PERMISSION_REASON_CODE = "permission_reason_code"
+    POLICY_ID = "policy_id"
+    POLICY_DENIED = "policy_denied"
+    PREDICTABILITY_SCORE = "predictability_score"
+    REASON = "reason"
+    RESULT_STATUS = "result_status"
+    RISK_SCORE = "risk_score"
+    SAFETY_RISK_SCORE = "safety_risk_score"
+    SEQUENCE = "sequence"
+    STATUS = "status"
+    TOOL_ID = "tool_id"
+    TOOL_VERSION = "tool_version"
+    TRACE_REFERENCE = "trace_reference"
+    UNRESOLVED = "unresolved"
+    WORKAROUND_TYPE = "workaround_type"
+    APPROVAL_REQUIRED = "approval_required"
+    APPROVAL_FRICTION = "approval_friction"
+    APPROVAL_WAIT = "approval_wait"
+    APPROVAL_STATUS = "approval_status"
+    APPROVAL_RESULT = "approval_result"
+    BUSINESS_SERVICE_AVAILABLE = "business_service_available"
+    EXTERNAL_SERVICE_AVAILABLE = "external_service_available"
+    BUSINESS_DEPENDENCY_AVAILABLE = "business_dependency_available"
+    BUSINESS_DEPENDENCY_BLOCKED = "business_dependency_blocked"
+    EXTERNAL_DEPENDENCY_BLOCKED = "external_dependency_blocked"
+    BUSINESS_SERVICE_STATUS = "business_service_status"
+    EXTERNAL_DEPENDENCY_STATUS = "external_dependency_status"
+    DEPENDENCY_STATUS = "dependency_status"
+    POLICY_CONSTRAINT = "policy_constraint"
+    POLICY_BLOCKED = "policy_blocked"
+    KNOWLEDGE_SOURCE_ISSUE = "knowledge_source_issue"
+    KNOWLEDGE_ISSUE = "knowledge_issue"
+    KNOWLEDGE_SOURCE_AVAILABLE = "knowledge_source_available"
+    KNOWLEDGE_SOURCE_STATUS = "knowledge_source_status"
+    RETRIEVAL_STATUS = "retrieval_status"
+    AGENT_ID = "agent_id"
+    AGENT_REF = "agent_ref"
+    AGENT_GAP = "agent_gap"
+    AGENT_COMPOSITION_MISSING = "agent_composition_missing"
+    REQUIRED_AGENT_MISSING = "required_agent_missing"
+    REQUIRED_AGENT_REF = "required_agent_ref"
+    SKILL_ID = "skill_id"
+    SKILL_REF = "skill_ref"
+    SKILL_GAP = "skill_gap"
+    REQUIRED_SKILL_MISSING = "required_skill_missing"
+    SKILL_INSUFFICIENT = "skill_insufficient"
+    REQUIRED_SKILL_REF = "required_skill_ref"
+    TOOL_REF = "tool_ref"
+    REQUIRED_TOOL_REF = "required_tool_ref"
+    PROMPT_ID = "prompt_id"
+    PROMPT_REF = "prompt_ref"
+    PROMPT_GAP = "prompt_gap"
+    PROMPT_FAILURE = "prompt_failure"
+    BEHAVIORAL_INSTRUCTION_FAILURE = "behavioral_instruction_failure"
+    REQUIRED_PROMPT_REF = "required_prompt_ref"
+    RESOLVED = "resolved"
+    RESOLUTION_CODE = "resolution_code"
+    OUTCOME_TYPE = "outcome_type"
+    ACTION_SUMMARY = "action_summary"
+    CORRECTION = "correction"
+    CORRECTED_FIELD = "corrected_field"
+    CSAT_SCORE = "csat_score"
+
+
 class OperationalSignal(ImmutableModel):
     """One normalized source-owned operational observation."""
 
@@ -329,6 +423,7 @@ class OpportunityCluster(ImmutableModel):
     window_start: datetime
     window_end: datetime
     opportunity_ids: tuple[str, ...] = Field(min_length=1)
+    source_signal_ids: tuple[str, ...] = Field(min_length=1)
     pattern_summary: str = Field(min_length=1)
     evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
     frequency: float = Field(ge=0.0)
@@ -353,10 +448,13 @@ class OpportunityCluster(ImmutableModel):
     def window_timestamps_are_aware(cls, value: datetime, info: object) -> datetime:
         return aware_timestamp(value, getattr(info, "field_name", "timestamp"))
 
-    @field_validator("opportunity_ids", "evidence_refs", "risk_factors")
+    @field_validator("opportunity_ids", "source_signal_ids", "evidence_refs", "risk_factors")
     @classmethod
     def cluster_lists_are_unique(cls, value: tuple[str, ...], info: object) -> tuple[str, ...]:
         unique_values(value, getattr(info, "field_name", "values"))
+        if getattr(info, "field_name", "") == "source_signal_ids":
+            for source_signal_id in value:
+                non_blank(source_signal_id, "source_signal_id")
         return value
 
     @model_validator(mode="after")
@@ -911,6 +1009,9 @@ class CandidateReference(ImmutableModel):
     skill_refs: tuple[ExactComponentReference, ...] = ()
     tool_refs: tuple[ExactComponentReference, ...] = ()
     policy_refs: tuple[ExactComponentReference, ...] = ()
+    proposal_id: str | None = Field(default=None, min_length=1)
+    baseline_inventory_snapshot_id: str | None = Field(default=None, min_length=1)
+    resolved_graph_digest: str | None = Field(default=None, min_length=1)
 
     @field_validator(
         "candidate_id", "tenant_id", "manifest_id", "manifest_digest", "registry_snapshot_id"
@@ -932,6 +1033,17 @@ class CandidateReference(ImmutableModel):
             unique_refs(refs, name)
             for ref in refs:
                 _require_type(ref, expected, name)
+        binding = (
+            self.proposal_id,
+            self.baseline_inventory_snapshot_id,
+            self.resolved_graph_digest,
+        )
+        if any(value is not None for value in binding) and not all(
+            value is not None for value in binding
+        ):
+            raise ValueError(
+                "candidate graph binding requires proposal, baseline snapshot, and digest"
+            )
         return self
 
 
@@ -946,6 +1058,9 @@ class EvaluationReference(ImmutableModel):
     promotion_evidence_id: str | None = Field(default=None, min_length=1)
     status: str = Field(min_length=1)
     evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
+    proposal_id: str | None = Field(default=None, min_length=1)
+    baseline_inventory_snapshot_id: str | None = Field(default=None, min_length=1)
+    resolved_graph_digest: str | None = Field(default=None, min_length=1)
 
     @field_validator(
         "evaluation_id", "tenant_id", "baseline_candidate_id", "candidate_id", "status"
@@ -966,6 +1081,17 @@ class EvaluationReference(ImmutableModel):
     def baseline_and_candidate_differ(self) -> "EvaluationReference":
         if self.baseline_candidate_id == self.candidate_id:
             raise ValueError("baseline_candidate_id and candidate_id must differ")
+        binding = (
+            self.proposal_id,
+            self.baseline_inventory_snapshot_id,
+            self.resolved_graph_digest,
+        )
+        if any(value is not None for value in binding) and not all(
+            value is not None for value in binding
+        ):
+            raise ValueError(
+                "evaluation graph binding requires proposal, baseline snapshot, and digest"
+            )
         return self
 
 
@@ -1176,6 +1302,7 @@ __all__ = [
     "ComponentType",
     "DecisionRecord",
     "DecisionSubjectType",
+    "DiagnosticFactKey",
     "DiagnosisType",
     "EvaluationReference",
     "EvidenceQuality",

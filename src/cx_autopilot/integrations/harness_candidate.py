@@ -20,12 +20,25 @@ from ..contracts import (
     AgentSystemInventorySnapshot,
     CandidateReference,
     ChangeProposal,
-    ComponentChangeOperation,
     ComponentType,
     ExactComponentReference,
     OperationalDisposition,
 )
-from ..contracts.common import non_blank, unique_values
+from ..contracts.common import non_blank
+from ..graph import (
+    AgentGraph,
+    GraphValidationError,
+    graph_digest,
+)
+from ..graph import (
+    apply_proposal as _apply_graph_proposal,
+)
+from ..graph import (
+    require_graph_match as _require_graph_match_impl,
+)
+from ..graph import (
+    validate_candidate_graph as _validate_graph,
+)
 from ..storage.ports import CandidateReferenceStore
 
 
@@ -67,15 +80,6 @@ class HarnessCandidateBuild:
         """Return the opaque Harness configuration sent to the factory."""
 
         return self.agent_config
-
-
-@dataclass(frozen=True)
-class _AgentGraph:
-    agent_ref: ExactComponentReference
-    prompt_ref: ExactComponentReference
-    skill_refs: tuple[ExactComponentReference, ...]
-    tool_refs: tuple[ExactComponentReference, ...]
-    policy_refs: tuple[ExactComponentReference, ...]
 
 
 class HarnessCandidateAdapter:
@@ -200,7 +204,11 @@ class HarnessCandidateAdapter:
             skill_refs=actual.skill_refs,
             tool_refs=actual.tool_refs,
             policy_refs=actual.policy_refs,
+            proposal_id=proposal.proposal_id,
+            baseline_inventory_snapshot_id=inventory.snapshot_id,
+            resolved_graph_digest=graph_digest(actual),
         )
+        validate_candidate_graph(proposal, inventory, reference)
         store = candidate_store or self.candidate_store
         if store is not None:
             try:
@@ -215,7 +223,27 @@ class HarnessCandidateAdapter:
         )
 
 
-def _config_graph(config: object, source_system: str) -> _AgentGraph:
+def validate_candidate_graph(
+    proposal: ChangeProposal,
+    inventory: AgentSystemInventorySnapshot,
+    candidate: CandidateReference,
+) -> None:
+    """Validate a candidate through the provider-neutral graph boundary."""
+
+    try:
+        _validate_graph(proposal, inventory, candidate)
+    except GraphValidationError as exc:
+        raise HarnessCandidateError(str(exc)) from exc
+
+
+def _require_graph_match(expected: AgentGraph, actual: AgentGraph) -> None:
+    try:
+        _require_graph_match_impl(expected, actual)
+    except GraphValidationError as exc:
+        raise HarnessCandidateError(str(exc)) from exc
+
+
+def _config_graph(config: object, source_system: str) -> AgentGraph:
     raw_identity = _field(config, "identity")
     if raw_identity is None:
         raw_identity = config
@@ -226,158 +254,21 @@ def _config_graph(config: object, source_system: str) -> _AgentGraph:
     skill_refs = _component_sequence(config, "skill_refs", ComponentType.SKILL, source_system)
     tool_refs = _component_sequence(config, "tool_refs", ComponentType.TOOL, source_system)
     policy_refs = _component_sequence(config, "policy_refs", ComponentType.POLICY, source_system)
-    return _AgentGraph(agent_ref, prompt_ref, skill_refs, tool_refs, policy_refs)
+    return AgentGraph(agent_ref, prompt_ref, skill_refs, tool_refs, policy_refs)
 
 
 def _apply_proposal(
     proposal: ChangeProposal,
     inventory: AgentSystemInventorySnapshot,
-    baseline: _AgentGraph,
-) -> _AgentGraph:
-    operations = proposal.proposed_component_changes
-    agent_before_refs: list[ExactComponentReference] = []
-    agent_after_refs: list[ExactComponentReference] = []
-    skill_dependency_transitions: list[tuple[ExactComponentReference, ExactComponentReference]] = []
-    for change in operations:
-        for reference in (
-            change.subject_before_ref,
-            change.subject_after_ref,
-            change.related_before_ref,
-            change.related_after_ref,
-        ):
-            if reference is not None and reference.source_system != inventory.source_system:
-                raise HarnessCandidateError(
-                    f"proposal reference uses a different source system: {reference.identity}"
-                )
-        if change.operation in {
-            ComponentChangeOperation.EXTEND_AGENT,
-            ComponentChangeOperation.COMPOSE_AGENT,
-        }:
-            agent_before_refs.append(cast(ExactComponentReference, change.subject_before_ref))
-            agent_after_refs.append(cast(ExactComponentReference, change.subject_after_ref))
-        elif change.operation is ComponentChangeOperation.CREATE_AGENT:
-            agent_after_refs.append(cast(ExactComponentReference, change.subject_after_ref))
-        elif change.operation in {
-            ComponentChangeOperation.ADD_AGENT_TOOL_REF,
-            ComponentChangeOperation.REMOVE_AGENT_TOOL_REF,
-            ComponentChangeOperation.ADD_AGENT_SKILL_REF,
-            ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
-        }:
-            agent_before_refs.append(cast(ExactComponentReference, change.subject_before_ref))
-            agent_after_refs.append(cast(ExactComponentReference, change.subject_after_ref))
-        elif change.operation is ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF:
-            agent_before_refs.append(cast(ExactComponentReference, change.related_before_ref))
-            agent_after_refs.append(cast(ExactComponentReference, change.related_after_ref))
-        elif change.operation in {
-            ComponentChangeOperation.ADD_SKILL_REQUIRED_TOOL_REF,
-            ComponentChangeOperation.ADD_SKILL_OPTIONAL_TOOL_REF,
-            ComponentChangeOperation.REMOVE_SKILL_TOOL_REF,
-        }:
-            skill_dependency_transitions.append(
-                (
-                    cast(ExactComponentReference, change.subject_before_ref),
-                    cast(ExactComponentReference, change.subject_after_ref),
-                )
-            )
-
-    baseline_agent_refs = _unique_identities(agent_before_refs, "proposal Agent before refs")
-    if baseline_agent_refs and baseline.agent_ref.identity not in baseline_agent_refs:
-        raise HarnessCandidateError(
-            "baseline Agent config does not match the proposal Agent before reference"
-        )
-    final_agent_refs = _unique_identities(agent_after_refs, "proposal Agent after refs")
-    if len(final_agent_refs) > 1:
-        raise HarnessCandidateError("proposal contains more than one resulting Agent identity")
-    final_agent = (
-        next(
-            reference for reference in agent_after_refs if reference.identity == final_agent_refs[0]
-        )
-        if final_agent_refs
-        else baseline.agent_ref
-    )
-
-    prompt_ref = baseline.prompt_ref
-    skill_refs = list(baseline.skill_refs)
-    tool_refs = list(baseline.tool_refs)
-    policy_refs = list(baseline.policy_refs)
-    for change in operations:
-        operation = change.operation
-        if operation is ComponentChangeOperation.ADD_AGENT_TOOL_REF:
-            _require_agent_subject(change, baseline.agent_ref)
-            related = cast(ExactComponentReference, change.related_after_ref)
-            if related.identity in {item.identity for item in tool_refs}:
-                raise HarnessCandidateError("proposal adds a Tool already in Agent authority")
-            tool_refs.append(related)
-        elif operation is ComponentChangeOperation.REMOVE_AGENT_TOOL_REF:
-            _require_agent_subject(change, baseline.agent_ref)
-            related = cast(ExactComponentReference, change.related_before_ref)
-            _remove_reference(tool_refs, related, "Agent Tool authority")
-        elif operation is ComponentChangeOperation.ADD_AGENT_SKILL_REF:
-            _require_agent_subject(change, baseline.agent_ref)
-            related = cast(ExactComponentReference, change.related_after_ref)
-            if related.identity in {item.identity for item in skill_refs}:
-                raise HarnessCandidateError("proposal adds a Skill already in Agent composition")
-            skill_refs.append(related)
-        elif operation is ComponentChangeOperation.REMOVE_AGENT_SKILL_REF:
-            _require_agent_subject(change, baseline.agent_ref)
-            related = cast(ExactComponentReference, change.related_before_ref)
-            _remove_reference(skill_refs, related, "Agent Skill composition")
-        elif operation is ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF:
-            agent_before = cast(ExactComponentReference, change.related_before_ref)
-            agent_after = cast(ExactComponentReference, change.related_after_ref)
-            if agent_before != baseline.agent_ref:
-                raise HarnessCandidateError("prompt change Agent before ref does not match config")
-            if agent_after != final_agent:
-                raise HarnessCandidateError("prompt change Agent after ref is inconsistent")
-            prompt_before = cast(ExactComponentReference, change.subject_before_ref)
-            prompt_after = cast(ExactComponentReference, change.subject_after_ref)
-            if prompt_ref != prompt_before:
-                raise HarnessCandidateError("prompt change baseline does not match config")
-            prompt_ref = prompt_after
-        elif operation in {
-            ComponentChangeOperation.EXTEND_AGENT,
-            ComponentChangeOperation.COMPOSE_AGENT,
-        }:
-            before = cast(ExactComponentReference, change.subject_before_ref)
-            if before != baseline.agent_ref:
-                raise HarnessCandidateError("Agent transition baseline does not match config")
-        elif operation is ComponentChangeOperation.CREATE_AGENT:
-            continue
-
-    for old_skill, new_skill in skill_dependency_transitions:
-        if old_skill.identity not in {item.identity for item in baseline.skill_refs}:
-            continue
-        has_remove = any(
-            change.operation is ComponentChangeOperation.REMOVE_AGENT_SKILL_REF
-            and change.related_before_ref == old_skill
-            and change.subject_before_ref == baseline.agent_ref
-            and change.subject_after_ref == final_agent
-            for change in operations
-        )
-        has_add = any(
-            change.operation is ComponentChangeOperation.ADD_AGENT_SKILL_REF
-            and change.related_after_ref == new_skill
-            and change.subject_before_ref == baseline.agent_ref
-            and change.subject_after_ref == final_agent
-            for change in operations
-        )
-        if not has_remove or not has_add:
-            raise HarnessCandidateError(
-                "a Skill version change must also version the Agent Skill graph edge"
-            )
-
-    final = _AgentGraph(
-        final_agent,
-        prompt_ref,
-        tuple(skill_refs),
-        tuple(tool_refs),
-        tuple(policy_refs),
-    )
-    _validate_graph_references(final)
-    return final
+    baseline: AgentGraph,
+) -> AgentGraph:
+    try:
+        return _apply_graph_proposal(proposal, inventory, baseline)
+    except GraphValidationError as exc:
+        raise HarnessCandidateError(str(exc)) from exc
 
 
-def _materialize_config(config: object, graph: _AgentGraph, *, source_system: str) -> object:
+def _materialize_config(config: object, graph: AgentGraph, *, source_system: str) -> object:
     payload = _config_payload(config)
     templates = _reference_templates(config)
     identity_template = _field(config, "identity")
@@ -401,9 +292,9 @@ def _materialize_config(config: object, graph: _AgentGraph, *, source_system: st
     return payload
 
 
-def _manifest_graph(manifest: object, source_system: str) -> _AgentGraph:
+def _manifest_graph(manifest: object, source_system: str) -> AgentGraph:
     agent_ref = _agent_reference(_required_field(manifest, "agent"), source_system)
-    graph = _AgentGraph(
+    graph = AgentGraph(
         agent_ref=agent_ref,
         prompt_ref=_component_reference(
             _required_field(manifest, "prompt_ref"), ComponentType.PROMPT, source_system
@@ -428,7 +319,12 @@ def _manifest_graph(manifest: object, source_system: str) -> _AgentGraph:
         nested = (
             _component_reference(raw, component_type, source_system)
             if field_name == "prompt_ref"
-            else _component_sequence(definition, field_name, component_type, source_system)
+            else tuple(
+                sorted(
+                    _component_sequence(definition, field_name, component_type, source_system),
+                    key=lambda reference: reference.identity,
+                )
+            )
         )
         expected_identities = _identities(expected if isinstance(expected, tuple) else (expected,))
         nested_identities = _identities(nested if isinstance(nested, tuple) else (nested,))
@@ -437,46 +333,6 @@ def _manifest_graph(manifest: object, source_system: str) -> _AgentGraph:
                 f"resolved manifest Agent {field_name} does not match top-level graph"
             )
     return graph
-
-
-def _require_graph_match(expected: _AgentGraph, actual: _AgentGraph) -> None:
-    if expected != actual:
-        differences = []
-        for name in ("agent_ref", "prompt_ref", "skill_refs", "tool_refs", "policy_refs"):
-            if getattr(expected, name) != getattr(actual, name):
-                differences.append(name)
-        raise HarnessCandidateError(
-            "resolved Harness manifest does not match proposal graph: " + ", ".join(differences)
-        )
-
-
-def _validate_graph_references(graph: _AgentGraph) -> None:
-    if graph.agent_ref.component_type is not ComponentType.AGENT:
-        raise HarnessCandidateError("candidate graph Agent reference is not an Agent")
-    for name, values, expected in (
-        ("skill_refs", graph.skill_refs, ComponentType.SKILL),
-        ("tool_refs", graph.tool_refs, ComponentType.TOOL),
-        ("policy_refs", graph.policy_refs, ComponentType.POLICY),
-    ):
-        if any(reference.component_type is not expected for reference in values):
-            raise HarnessCandidateError(f"candidate graph {name} has an invalid component type")
-        unique_values(_identities(values), name)
-
-
-def _require_agent_subject(change: object, baseline_agent: ExactComponentReference) -> None:
-    subject_before = cast(ExactComponentReference, _required_field(change, "subject_before_ref"))
-    if subject_before != baseline_agent:
-        raise HarnessCandidateError("Agent relationship baseline does not match config")
-
-
-def _remove_reference(
-    values: list[ExactComponentReference], reference: ExactComponentReference, label: str
-) -> None:
-    for index, current in enumerate(values):
-        if current == reference:
-            values.pop(index)
-            return
-    raise HarnessCandidateError(f"proposal removes a missing {label} reference")
 
 
 def _component_sequence(
@@ -756,13 +612,6 @@ def _required_text(value: object, name: str) -> str:
     return result
 
 
-def _unique_identities(
-    values: Sequence[ExactComponentReference], field_name: str
-) -> tuple[str, ...]:
-    del field_name
-    return tuple(dict.fromkeys(_identities(values)))
-
-
 def _identities(values: Sequence[ExactComponentReference]) -> tuple[str, ...]:
     return tuple(value.identity for value in values)
 
@@ -778,4 +627,6 @@ __all__ = [
     "HarnessCandidateBuild",
     "HarnessCandidateError",
     "HarnessFactoryPort",
+    "graph_digest",
+    "validate_candidate_graph",
 ]

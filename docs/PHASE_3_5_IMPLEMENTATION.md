@@ -77,9 +77,9 @@ pattern, window, and source identities.
 
 `OpportunityClusterer` groups by tenant, pattern type, pattern key, and the
 configured half-open window. Cluster membership retains all contributing
-opportunity IDs and the union of their evidence references and occurrence
-keys. Frequency is calculated from unique occurrence keys, so repeated source
-evidence does not inflate it.
+opportunity IDs, the exact union of their source signal IDs, and their
+evidence references. Frequency is calculated from unique occurrence keys, so
+repeated source evidence does not inflate it.
 
 `OpportunityPriorityFactors` stores normalized factors separately from the
 final score and rank. A factor is `null` when the evidence does not support it.

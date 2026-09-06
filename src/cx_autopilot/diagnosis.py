@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from .contracts import (
     AgentSystemInventorySnapshot,
     ComponentType,
     DiagnosisType,
+    DiagnosticFactKey,
     EvidenceQuality,
     ExactComponentReference,
     OperationalSignal,
     OpportunityCluster,
     ProblemDiagnosis,
+)
+from .contracts.common import non_blank
+from .storage.ports import (
+    OperationalSignalStore,
+    OpportunityClusterStore,
+    OpportunityStore,
 )
 
 DiagnosisFallback = Callable[
@@ -53,6 +60,38 @@ _KNOWLEDGE_ISSUE_TOKENS = {
     "unavailable",
     "failed",
 }
+_BUSINESS_BLOCKER_EVENT_TYPES = {
+    "business_service_outage",
+    "business_dependency_unavailable",
+    "external_service_outage",
+    "external_dependency_unavailable",
+}
+_POLICY_BLOCKER_EVENT_TYPES = {
+    "policy_denied",
+    "policy_denial",
+    "permission_denied",
+    "permission_forbidden",
+}
+_APPROVAL_FRICTION_EVENT_TYPES = {
+    "approval_pending",
+    "approval_waiting",
+    "approval_requested",
+}
+_KNOWLEDGE_ISSUE_EVENT_TYPES = {
+    "knowledge_source_missing",
+    "knowledge_source_stale",
+    "knowledge_source_unavailable",
+    "knowledge_source_inaccessible",
+    "knowledge_source_contradictory",
+    "retrieval_failed",
+}
+_AGENT_GAP_EVENT_TYPES = {"agent_gap", "agent_composition_missing"}
+_SKILL_GAP_EVENT_TYPES = {"skill_gap", "skill_missing", "skill_insufficient"}
+_PROMPT_GAP_EVENT_TYPES = {
+    "prompt_gap",
+    "prompt_failure",
+    "behavioral_instruction_failure",
+}
 _USABLE_LIFECYCLES = {"ACTIVE", "VALIDATED"}
 
 
@@ -67,8 +106,97 @@ class DiagnosisUndeterminedError(DiagnosisError):
 class OperationalDiagnoser:
     """Apply the build-plan diagnosis precedence in a fixed order."""
 
-    def __init__(self, fallback: DiagnosisFallback | None = None) -> None:
+    def __init__(
+        self,
+        fallback: DiagnosisFallback | None = None,
+        *,
+        cluster_store: OpportunityClusterStore | None = None,
+        opportunity_store: OpportunityStore | None = None,
+        signal_store: OperationalSignalStore | None = None,
+    ) -> None:
         self.fallback = fallback
+        self.cluster_store = cluster_store
+        self.opportunity_store = opportunity_store
+        self.signal_store = signal_store
+
+    def diagnose_cluster(
+        self,
+        cluster_id: str,
+        tenant_id: str,
+        inventory: AgentSystemInventorySnapshot | None = None,
+        *,
+        target_agent_ref: ExactComponentReference | None = None,
+        required_skill_ref: ExactComponentReference | None = None,
+        required_tool_ref: ExactComponentReference | None = None,
+        required_prompt_ref: ExactComponentReference | None = None,
+    ) -> ProblemDiagnosis:
+        """Diagnose a stored cluster from its exact contributing evidence only."""
+
+        tenant = non_blank(tenant_id, "tenant_id")
+        cluster_key = non_blank(cluster_id, "cluster_id")
+        cluster_store = self.cluster_store
+        opportunity_store = self.opportunity_store
+        signal_store = self.signal_store
+        if cluster_store is None or opportunity_store is None or signal_store is None:
+            raise DiagnosisError(
+                "diagnose_cluster requires cluster, opportunity, and signal stores"
+            )
+        cluster = cluster_store.get(cluster_key, tenant_id=tenant)
+        if cluster is None:
+            raise DiagnosisError("diagnosis cluster was not found in the requested tenant")
+        if cluster.tenant_id != tenant:
+            raise DiagnosisError("diagnosis cluster is outside the requested tenant")
+
+        opportunities = []
+        for opportunity_id in cluster.opportunity_ids:
+            opportunity = opportunity_store.get(opportunity_id, tenant_id=tenant)
+            if opportunity is None:
+                raise DiagnosisError(
+                    f"missing opportunity contributing to cluster: {opportunity_id}"
+                )
+            if opportunity.tenant_id != cluster.tenant_id:
+                raise DiagnosisError("cluster opportunity is outside the cluster tenant")
+            opportunities.append(opportunity)
+
+        linked_signal_ids = {
+            signal_id
+            for opportunity in opportunities
+            for signal_id in opportunity.source_signal_ids
+        }
+        linked_evidence_refs = {
+            evidence_ref
+            for opportunity in opportunities
+            for evidence_ref in opportunity.evidence_refs
+        }
+        if linked_signal_ids != set(cluster.source_signal_ids):
+            raise DiagnosisError("cluster source signal lineage does not match its opportunities")
+        if linked_evidence_refs != set(cluster.evidence_refs):
+            raise DiagnosisError("cluster evidence lineage does not match its opportunities")
+        if not linked_signal_ids:
+            raise DiagnosisError("cluster must declare contributing source signals")
+
+        signals: list[OperationalSignal] = []
+        for signal_id in sorted(linked_signal_ids):
+            signal = signal_store.get(signal_id, tenant_id=tenant)
+            if signal is None:
+                raise DiagnosisError(f"missing contributing signal: {signal_id}")
+            if signal.tenant_id != cluster.tenant_id:
+                raise DiagnosisError("contributing signal is outside the cluster tenant")
+            if not set(signal.evidence_refs).issubset(linked_evidence_refs):
+                raise DiagnosisError(
+                    f"signal evidence is not declared by cluster lineage: {signal_id}"
+                )
+            signals.append(signal)
+
+        return self.diagnose(
+            cluster,
+            tuple(signals),
+            inventory,
+            target_agent_ref=target_agent_ref,
+            required_skill_ref=required_skill_ref,
+            required_tool_ref=required_tool_ref,
+            required_prompt_ref=required_prompt_ref,
+        )
 
     def diagnose(
         self,
@@ -403,7 +531,7 @@ def _infer_agent(
     versions = {
         value
         for signal in signals
-        for value in [_text(signal.normalized_attributes.get("agent_version"))]
+        for value in [_text(_fact(signal.normalized_attributes, DiagnosticFactKey.AGENT_VERSION))]
         if value is not None
     }
     if versions:
@@ -424,7 +552,7 @@ def _infer_skill(
     ids = {
         value
         for signal in signals
-        for value in [_text(signal.normalized_attributes.get("skill_id"))]
+        for value in [_text(_fact(signal.normalized_attributes, DiagnosticFactKey.SKILL_ID))]
         if value is not None
     }
     if ids:
@@ -448,9 +576,9 @@ def _infer_tool(
 def _parse_tool_ref(signals: Sequence[OperationalSignal]) -> ExactComponentReference | None:
     raw = next(
         (
-            _text(signal.normalized_attributes.get("tool_ref"))
+            _text(_fact(signal.normalized_attributes, DiagnosticFactKey.TOOL_REF))
             for signal in signals
-            if _text(signal.normalized_attributes.get("tool_ref")) is not None
+            if _text(_fact(signal.normalized_attributes, DiagnosticFactKey.TOOL_REF)) is not None
         ),
         None,
     )
@@ -537,24 +665,30 @@ def _quality_confidence(signals: Sequence[OperationalSignal]) -> float:
 def _has_business_dependency_blocker(signals: Sequence[OperationalSignal]) -> bool:
     for signal in signals:
         attrs = signal.normalized_attributes
+        event_type = _token(_text(_fact(attrs, DiagnosticFactKey.EVENT_TYPE)) or "")
+        if event_type in _BUSINESS_BLOCKER_EVENT_TYPES:
+            return True
         for key in (
-            "business_service_available",
-            "external_service_available",
-            "business_dependency_available",
+            DiagnosticFactKey.BUSINESS_SERVICE_AVAILABLE,
+            DiagnosticFactKey.EXTERNAL_SERVICE_AVAILABLE,
+            DiagnosticFactKey.BUSINESS_DEPENDENCY_AVAILABLE,
         ):
-            value = _boolean(attrs.get(key))
+            value = _boolean(_fact(attrs, key))
             if value is False:
                 return True
         if any(
-            _boolean(attrs.get(key)) is True
-            for key in ("business_dependency_blocked", "external_dependency_blocked")
+            _boolean(_fact(attrs, key)) is True
+            for key in (
+                DiagnosticFactKey.BUSINESS_DEPENDENCY_BLOCKED,
+                DiagnosticFactKey.EXTERNAL_DEPENDENCY_BLOCKED,
+            )
         ):
             return True
         status = _token(
             _text(
-                attrs.get("business_service_status")
-                or attrs.get("external_dependency_status")
-                or attrs.get("dependency_status")
+                _fact(attrs, DiagnosticFactKey.BUSINESS_SERVICE_STATUS)
+                or _fact(attrs, DiagnosticFactKey.EXTERNAL_DEPENDENCY_STATUS)
+                or _fact(attrs, DiagnosticFactKey.DEPENDENCY_STATUS)
             )
             or ""
         )
@@ -566,13 +700,26 @@ def _has_business_dependency_blocker(signals: Sequence[OperationalSignal]) -> bo
 def _has_policy_constraint(signals: Sequence[OperationalSignal]) -> bool:
     for signal in signals:
         attrs = signal.normalized_attributes
+        event_type = _token(_text(_fact(attrs, DiagnosticFactKey.EVENT_TYPE)) or "")
+        if event_type in _POLICY_BLOCKER_EVENT_TYPES:
+            return True
         if any(
-            _boolean(attrs.get(key)) is True
-            for key in ("policy_denied", "policy_constraint", "policy_blocked")
+            _boolean(_fact(attrs, key)) is True
+            for key in (
+                DiagnosticFactKey.POLICY_DENIED,
+                DiagnosticFactKey.POLICY_CONSTRAINT,
+                DiagnosticFactKey.POLICY_BLOCKED,
+            )
         ):
             return True
-        reason = _token(_text(attrs.get("permission_reason_code") or attrs.get("policy_id")) or "")
-        result = _token(_text(attrs.get("result_status")) or "")
+        reason = _token(
+            _text(
+                _fact(attrs, DiagnosticFactKey.PERMISSION_REASON_CODE)
+                or _fact(attrs, DiagnosticFactKey.POLICY_ID)
+            )
+            or ""
+        )
+        result = _token(_text(_fact(attrs, DiagnosticFactKey.RESULT_STATUS)) or "")
         if reason in {"policy_denied", "permission_denied", "denied", "forbidden"}:
             return True
         if result in {"policy_denied", "permission_denied", "denied", "forbidden"}:
@@ -583,20 +730,29 @@ def _has_policy_constraint(signals: Sequence[OperationalSignal]) -> bool:
 def _has_approval_friction(signals: Sequence[OperationalSignal]) -> bool:
     for signal in signals:
         attrs = signal.normalized_attributes
-        if _boolean(attrs.get("approval_friction")) is True:
+        event_type = _token(_text(_fact(attrs, DiagnosticFactKey.EVENT_TYPE)) or "")
+        if event_type in _APPROVAL_FRICTION_EVENT_TYPES:
             return True
-        if _boolean(attrs.get("approval_wait")) is True:
+        if _boolean(_fact(attrs, DiagnosticFactKey.APPROVAL_FRICTION)) is True:
             return True
-        status = _token(_text(attrs.get("approval_status") or attrs.get("status")) or "")
-        result = _token(_text(attrs.get("approval_result")) or "")
+        if _boolean(_fact(attrs, DiagnosticFactKey.APPROVAL_WAIT)) is True:
+            return True
+        status = _token(
+            _text(
+                _fact(attrs, DiagnosticFactKey.APPROVAL_STATUS)
+                or _fact(attrs, DiagnosticFactKey.STATUS)
+            )
+            or ""
+        )
+        result = _token(_text(_fact(attrs, DiagnosticFactKey.APPROVAL_RESULT)) or "")
         waiting = status in {"pending", "waiting", "waiting_approval", "queued"} or result in {
             "pending",
             "waiting",
             "waiting_approval",
         }
-        if "approval_status" in attrs and waiting:
+        if DiagnosticFactKey.APPROVAL_STATUS.value in attrs and waiting:
             return True
-        if _boolean(attrs.get("approval_required")) is True and waiting:
+        if _boolean(_fact(attrs, DiagnosticFactKey.APPROVAL_REQUIRED)) is True and waiting:
             return True
         if signal.source_record_type == "approval" and waiting:
             return True
@@ -606,15 +762,22 @@ def _has_approval_friction(signals: Sequence[OperationalSignal]) -> bool:
 def _has_knowledge_source_issue(signals: Sequence[OperationalSignal]) -> bool:
     for signal in signals:
         attrs = signal.normalized_attributes
+        event_type = _token(_text(_fact(attrs, DiagnosticFactKey.EVENT_TYPE)) or "")
+        if event_type in _KNOWLEDGE_ISSUE_EVENT_TYPES:
+            return True
         if any(
-            _boolean(attrs.get(key)) is True
-            for key in ("knowledge_source_issue", "knowledge_issue")
+            _boolean(_fact(attrs, key)) is True
+            for key in (DiagnosticFactKey.KNOWLEDGE_SOURCE_ISSUE, DiagnosticFactKey.KNOWLEDGE_ISSUE)
         ):
             return True
-        if _boolean(attrs.get("knowledge_source_available")) is False:
+        if _boolean(_fact(attrs, DiagnosticFactKey.KNOWLEDGE_SOURCE_AVAILABLE)) is False:
             return True
         status = _token(
-            _text(attrs.get("knowledge_source_status") or attrs.get("retrieval_status")) or ""
+            _text(
+                _fact(attrs, DiagnosticFactKey.KNOWLEDGE_SOURCE_STATUS)
+                or _fact(attrs, DiagnosticFactKey.RETRIEVAL_STATUS)
+            )
+            or ""
         )
         if status in _KNOWLEDGE_ISSUE_TOKENS:
             return True
@@ -623,25 +786,49 @@ def _has_knowledge_source_issue(signals: Sequence[OperationalSignal]) -> bool:
 
 def _explicit_agent_gap(signals: Sequence[OperationalSignal]) -> bool:
     return any(
-        _boolean(signal.normalized_attributes.get(key)) is True
+        _boolean(_fact(signal.normalized_attributes, key)) is True
         for signal in signals
-        for key in ("agent_gap", "agent_composition_missing", "required_agent_missing")
+        for key in (
+            DiagnosticFactKey.AGENT_GAP,
+            DiagnosticFactKey.AGENT_COMPOSITION_MISSING,
+            DiagnosticFactKey.REQUIRED_AGENT_MISSING,
+        )
+    ) or any(
+        _token(_text(_fact(signal.normalized_attributes, DiagnosticFactKey.EVENT_TYPE)) or "")
+        in _AGENT_GAP_EVENT_TYPES
+        for signal in signals
     )
 
 
 def _explicit_skill_gap(signals: Sequence[OperationalSignal]) -> bool:
     return any(
-        _boolean(signal.normalized_attributes.get(key)) is True
+        _boolean(_fact(signal.normalized_attributes, key)) is True
         for signal in signals
-        for key in ("skill_gap", "required_skill_missing", "skill_insufficient")
+        for key in (
+            DiagnosticFactKey.SKILL_GAP,
+            DiagnosticFactKey.REQUIRED_SKILL_MISSING,
+            DiagnosticFactKey.SKILL_INSUFFICIENT,
+        )
+    ) or any(
+        _token(_text(_fact(signal.normalized_attributes, DiagnosticFactKey.EVENT_TYPE)) or "")
+        in _SKILL_GAP_EVENT_TYPES
+        for signal in signals
     )
 
 
 def _explicit_prompt_gap(signals: Sequence[OperationalSignal]) -> bool:
     return any(
-        _boolean(signal.normalized_attributes.get(key)) is True
+        _boolean(_fact(signal.normalized_attributes, key)) is True
         for signal in signals
-        for key in ("prompt_gap", "prompt_failure", "behavioral_instruction_failure")
+        for key in (
+            DiagnosticFactKey.PROMPT_GAP,
+            DiagnosticFactKey.PROMPT_FAILURE,
+            DiagnosticFactKey.BEHAVIORAL_INSTRUCTION_FAILURE,
+        )
+    ) or any(
+        _token(_text(_fact(signal.normalized_attributes, DiagnosticFactKey.EVENT_TYPE)) or "")
+        in _PROMPT_GAP_EVENT_TYPES
+        for signal in signals
     )
 
 
@@ -668,9 +855,9 @@ def _affected_refs(
         values["tool"] = (requirements.required_tool_ref,)
     if diagnosis_type is DiagnosisType.POLICY_CONSTRAINT and inventory is not None:
         policy_ids = {
-            _text(signal.normalized_attributes.get("policy_id"))
+            _text(_fact(signal.normalized_attributes, DiagnosticFactKey.POLICY_ID))
             for signal in signals
-            if _text(signal.normalized_attributes.get("policy_id")) is not None
+            if _text(_fact(signal.normalized_attributes, DiagnosticFactKey.POLICY_ID)) is not None
         }
         values["policy"] = tuple(
             sorted(
@@ -719,6 +906,14 @@ def _validate_scope(
         raise DiagnosisError("all diagnosis signals must belong to the cluster tenant")
     if inventory is not None and inventory.tenant_id != cluster.tenant_id:
         raise DiagnosisError("inventory and cluster must belong to the same tenant")
+    signal_ids = tuple(signal.signal_id for signal in signals)
+    if len(signal_ids) != len(set(signal_ids)):
+        raise DiagnosisError("diagnosis evidence must not contain duplicate signal IDs")
+    if set(signal_ids) != set(cluster.source_signal_ids):
+        raise DiagnosisError("diagnosis signals must exactly match cluster source lineage")
+    declared_evidence_refs = set(cluster.evidence_refs)
+    if any(not set(signal.evidence_refs).issubset(declared_evidence_refs) for signal in signals):
+        raise DiagnosisError("diagnosis signal evidence is not declared by cluster lineage")
 
 
 def _deduplicate_signals(
@@ -738,8 +933,13 @@ def _deduplicate_signals(
 
 def _tool_id(signals: Sequence[OperationalSignal]) -> str | None:
     for signal in signals:
-        for key in ("tool_id", "business_operation", "lookup_type", "operation"):
-            value = _text(signal.normalized_attributes.get(key))
+        for key in (
+            DiagnosticFactKey.TOOL_ID,
+            DiagnosticFactKey.BUSINESS_OPERATION,
+            DiagnosticFactKey.LOOKUP_TYPE,
+            DiagnosticFactKey.OPERATION,
+        ):
+            value = _text(_fact(signal.normalized_attributes, key))
             if value is not None:
                 return value
     return None
@@ -747,7 +947,7 @@ def _tool_id(signals: Sequence[OperationalSignal]) -> str | None:
 
 def _tool_version(signals: Sequence[OperationalSignal]) -> str | None:
     for signal in signals:
-        value = _text(signal.normalized_attributes.get("tool_version"))
+        value = _text(_fact(signal.normalized_attributes, DiagnosticFactKey.TOOL_VERSION))
         if value is not None:
             return value
     return None
@@ -770,7 +970,11 @@ def _text(value: object) -> str | None:
 
 
 def _token(value: str) -> str:
-    return value.strip().lower().replace("-", "_").replace(" ", "_")
+    return value.strip().lower().replace("-", "_").replace(" ", "_").replace(".", "_")
+
+
+def _fact(attributes: Mapping[str, object], key: DiagnosticFactKey) -> object | None:
+    return attributes.get(key.value)
 
 
 __all__ = [

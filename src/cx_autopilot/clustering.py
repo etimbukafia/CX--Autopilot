@@ -127,12 +127,15 @@ class OpportunityClusterer:
             for opportunity in opportunities
             for signal_id in opportunity.source_signal_ids
         }
+        normalized_source_signal_ids = tuple(sorted(source_signal_ids))
         occurrence_keys = {
             occurrence_key
             for opportunity in opportunities
             for occurrence_key in opportunity.occurrence_keys
         }
-        frequency = float(len(occurrence_keys or source_signal_ids or set(opportunity_ids)))
+        frequency = float(
+            len(occurrence_keys or set(normalized_source_signal_ids) or set(opportunity_ids))
+        )
         impact = _max_known(opportunity.impact_estimate for opportunity in opportunities)
         confidence = _mean_known(opportunity.confidence for opportunity in opportunities)
         if confidence is None:
@@ -179,6 +182,7 @@ class OpportunityClusterer:
             "window_start": window_start.isoformat(),
             "window_end": window_end.isoformat(),
             "opportunity_ids": opportunity_ids,
+            "source_signal_ids": normalized_source_signal_ids,
         }
         cluster_id = (
             "cluster_"
@@ -192,6 +196,7 @@ class OpportunityClusterer:
             window_start=window_start,
             window_end=window_end,
             opportunity_ids=opportunity_ids,
+            source_signal_ids=normalized_source_signal_ids,
             pattern_summary=(
                 f"{pattern_type.value} for {pattern_key} across "
                 f"{len(opportunity_ids)} opportunity record(s)."

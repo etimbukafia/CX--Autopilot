@@ -168,8 +168,9 @@ def cluster(cluster_id: str = "cluster-1") -> OpportunityCluster:
         window_start=NOW,
         window_end=NOW,
         opportunity_ids=(f"opportunity-{cluster_id}",),
+        source_signal_ids=("signal-1",),
         pattern_summary="Repeated operational work.",
-        evidence_refs=(f"evidence:{cluster_id}",),
+        evidence_refs=("evidence:" + cluster_id, "evidence:signal-1"),
         frequency=3.0,
         confidence=0.84,
     )

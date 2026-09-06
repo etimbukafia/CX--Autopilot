@@ -175,6 +175,9 @@ class ImprovementLabEvaluationAdapter:
                         *_lab_evidence_refs(candidate_report),
                         f"lab:evaluation-failure:{type(exc).__name__}",
                     ),
+                    proposal_id=candidate_reference.proposal_id,
+                    baseline_inventory_snapshot_id=candidate_reference.baseline_inventory_snapshot_id,
+                    resolved_graph_digest=candidate_reference.resolved_graph_digest,
                 )
             )
             return LabEvaluationResult(reference, baseline_report, candidate_report, None)
@@ -208,6 +211,9 @@ class ImprovementLabEvaluationAdapter:
                         *_lab_evidence_refs(candidate_report),
                         f"lab:comparison-failure:{type(exc).__name__}",
                     ),
+                    proposal_id=candidate_reference.proposal_id,
+                    baseline_inventory_snapshot_id=candidate_reference.baseline_inventory_snapshot_id,
+                    resolved_graph_digest=candidate_reference.resolved_graph_digest,
                 )
             )
             return LabEvaluationResult(reference, baseline_report, candidate_report, None)
@@ -234,6 +240,9 @@ class ImprovementLabEvaluationAdapter:
                 promotion_evidence_id=promotion_id,
                 status=EVALUATION_SUCCEEDED,
                 evidence_refs=evidence,
+                proposal_id=candidate_reference.proposal_id,
+                baseline_inventory_snapshot_id=candidate_reference.baseline_inventory_snapshot_id,
+                resolved_graph_digest=candidate_reference.resolved_graph_digest,
             )
         )
         return LabEvaluationResult(reference, baseline_report, candidate_report, comparison)

@@ -14,7 +14,6 @@ from .contracts import (
     AgentSystemInventorySnapshot,
     CandidateReference,
     ChangeProposal,
-    ComponentType,
     EvaluationReference,
     Opportunity,
     OpportunityCluster,
@@ -22,6 +21,7 @@ from .contracts import (
     ProblemDiagnosis,
 )
 from .contracts.common import aware_timestamp, non_blank, unique_values
+from .graph import GraphValidationError, validate_candidate_graph
 from .storage.ports import PilotRecommendationStore
 
 
@@ -89,7 +89,18 @@ class PilotRecommender:
             raise RecommendationError("comparison does not match the evaluation reference")
         if _comparison_verdict(comparison_record) != "improved":
             raise RecommendationError("an improved Lab comparison is required for a pilot")
-        _validate_candidate_graph(proposal, candidate_reference)
+        try:
+            validate_candidate_graph(proposal, inventory, candidate_reference)
+        except GraphValidationError as exc:
+            raise RecommendationError(str(exc)) from exc
+        if (
+            evaluation_reference.proposal_id != candidate_reference.proposal_id
+            or evaluation_reference.baseline_inventory_snapshot_id
+            != candidate_reference.baseline_inventory_snapshot_id
+            or evaluation_reference.resolved_graph_digest
+            != candidate_reference.resolved_graph_digest
+        ):
+            raise RecommendationError("evaluation does not preserve candidate graph binding")
 
         source_evidence = _operational_evidence(
             proposal,
@@ -205,33 +216,6 @@ def _operational_evidence(
         result.extend(cluster.evidence_refs)
         result.append(f"cluster:{cluster.cluster_id}")
     return _append_evidence(*result)
-
-
-def _validate_candidate_graph(proposal: ChangeProposal, candidate: CandidateReference) -> None:
-    before = {
-        reference.identity
-        for change in proposal.proposed_component_changes
-        for reference in (
-            change.subject_before_ref,
-            change.related_before_ref,
-        )
-        if reference is not None and reference.component_type is ComponentType.AGENT
-    }
-    after = {
-        reference.identity
-        for change in proposal.proposed_component_changes
-        for reference in (
-            change.subject_after_ref,
-            change.related_after_ref,
-        )
-        if reference is not None and reference.component_type is ComponentType.AGENT
-    }
-    if after and candidate.agent_ref.identity not in after:
-        raise RecommendationError("candidate Agent identity does not match the proposal result")
-    if not after:
-        declared = {reference.identity for reference in proposal.target_agent_refs}
-        if declared and candidate.agent_ref.identity not in declared.difference(before):
-            raise RecommendationError("candidate Agent identity is not declared by the proposal")
 
 
 def _validate_scope(value: Mapping[str, Any], candidate: CandidateReference) -> dict[str, Any]:

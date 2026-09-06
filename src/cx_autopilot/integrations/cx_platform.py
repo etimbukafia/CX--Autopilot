@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import Field, JsonValue, field_validator
 
-from ..contracts import EvidenceQuality, OperationalSignal
+from ..contracts import DiagnosticFactKey, EvidenceQuality, OperationalSignal
 from ..contracts.common import ImmutableModel, aware_timestamp, non_blank, unique_values
 from ..storage.ports import OperationalSignalStore
 
@@ -23,51 +23,7 @@ JsonGetter = Callable[[str, Mapping[str, str]], object]
 _SOURCE_SYSTEM = "cx-platform"
 _MAX_ATTRIBUTE_TEXT = 256
 _MAX_ATTRIBUTE_LIST = 20
-_EVENT_ATTRIBUTE_KEYS = frozenset(
-    {
-        "action_digest",
-        "agent_version",
-        "approval_id",
-        "action_sequence",
-        "business_operation",
-        "call_id",
-        "cause",
-        "customer_impact_score",
-        "correction_type",
-        "error_code",
-        "escalation_id",
-        "evidence_ids",
-        "effort_score",
-        "external_dependency_risk_score",
-        "harness_request_id",
-        "human_workaround",
-        "impact_score",
-        "lookup_type",
-        "manual_action",
-        "operation",
-        "operation_sequence",
-        "operator_action",
-        "operator_correction",
-        "outcome_id",
-        "outcome_status",
-        "operational_effort_score",
-        "permission_reason_code",
-        "policy_id",
-        "policy_denied",
-        "predictability_score",
-        "reason",
-        "result_status",
-        "risk_score",
-        "safety_risk_score",
-        "sequence",
-        "status",
-        "tool_id",
-        "tool_version",
-        "trace_reference",
-        "unresolved",
-        "workaround_type",
-    }
-)
+_EVENT_ATTRIBUTE_KEYS = frozenset(key.value for key in DiagnosticFactKey)
 
 
 class CXPlatformSourceError(RuntimeError):
@@ -774,10 +730,11 @@ def _normalized_attributes(resource: str, record: SourceRecord) -> dict[str, Jso
     if resource == "event":
         raw_data = record.get("data", {})
         data = raw_data if isinstance(raw_data, Mapping) else {}
-        attributes = _bounded_attributes(data, _EVENT_ATTRIBUTE_KEYS)
+        attributes = _bounded_attributes(record, _EVENT_ATTRIBUTE_KEYS)
+        attributes.update(_bounded_attributes(data, _EVENT_ATTRIBUTE_KEYS))
         event_type = _text(record.get("event_type"))
         if event_type is not None:
-            attributes["event_type"] = event_type
+            attributes[DiagnosticFactKey.EVENT_TYPE.value] = event_type
         return attributes
     keys_by_resource: dict[str, frozenset[str]] = {
         "ticket": frozenset({"priority", "resolution_code", "status"}),
