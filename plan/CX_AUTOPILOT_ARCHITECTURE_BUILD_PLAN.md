@@ -1506,20 +1506,20 @@ Turn a validated Autopilot proposal into a governed evaluation candidate without
 
 ### Tasks
 
-- [ ] Implement the Harness construction port from the verified Phase 0 contracts.
-- [ ] Use current public Harness contracts only.
-- [ ] Build through Harness registry/factory boundaries.
-- [ ] Construct the candidate in an evaluation-safe scope.
-- [ ] Do not mutate the production agent or production registry as a side effect of candidate construction.
-- [ ] Do not construct authority outside Harness.
-- [ ] Capture `ResolvedAgentManifest`.
-- [ ] Capture manifest ID.
-- [ ] Capture manifest digest.
-- [ ] Capture registry snapshot identity.
-- [ ] Capture exact agent, prompt, skill, tool, and policy refs.
-- [ ] Validate proposal intent against the resolved component graph.
-- [ ] Fail candidate construction if a required resolved identity does not match proposal intent.
-- [ ] Store only `CandidateReference` and evidence needed by Autopilot.
+- [x] Implement the Harness construction port from the verified Phase 0 contracts.
+- [x] Use current public Harness contracts only.
+- [x] Build through Harness registry/factory boundaries.
+- [x] Construct the candidate in an evaluation-safe scope.
+- [x] Do not mutate the production agent or production registry as a side effect of candidate construction.
+- [x] Do not construct authority outside Harness.
+- [x] Capture `ResolvedAgentManifest`.
+- [x] Capture manifest ID.
+- [x] Capture manifest digest.
+- [x] Capture registry snapshot identity.
+- [x] Capture exact agent, prompt, skill, tool, and policy refs.
+- [x] Validate proposal intent against the resolved component graph.
+- [x] Fail candidate construction if a required resolved identity does not match proposal intent.
+- [x] Store only `CandidateReference` and evidence needed by Autopilot.
 
 ### Exit criteria
 
@@ -1537,21 +1537,21 @@ Evaluate the governed candidate without duplicating Improvement Lab logic or int
 
 ### Tasks
 
-- [ ] Implement the minimal evaluation port from the verified Phase 0 contracts.
-- [ ] Submit baseline candidate identity.
-- [ ] Submit governed candidate identity.
-- [ ] Submit evaluation case/data references required by the Lab contract.
-- [ ] Submit relevant operational evidence references where supported.
-- [ ] Preserve environment and manifest identity.
-- [ ] Receive evaluation reference.
-- [ ] Receive comparison reference.
-- [ ] Preserve regression evidence references.
-- [ ] Preserve promotion evidence reference when produced.
-- [ ] Do not reproduce Lab root-cause logic in Autopilot.
-- [ ] Do not reproduce Lab candidate builders in Autopilot.
-- [ ] Do not reproduce Lab comparison or promotion logic in Autopilot.
-- [ ] Handle evaluation failure as a first-class `EVALUATION_FAILED` outcome.
-- [ ] Do not automatically modify the candidate after evaluation failure.
+- [x] Implement the minimal evaluation port from the verified Phase 0 contracts.
+- [x] Submit baseline candidate identity.
+- [x] Submit governed candidate identity.
+- [x] Submit evaluation case/data references required by the Lab contract.
+- [x] Submit relevant operational evidence references where supported.
+- [x] Preserve environment and manifest identity.
+- [x] Receive evaluation reference.
+- [x] Receive comparison reference.
+- [x] Preserve regression evidence references.
+- [x] Preserve promotion evidence reference when produced.
+- [x] Do not reproduce Lab root-cause logic in Autopilot.
+- [x] Do not reproduce Lab candidate builders in Autopilot.
+- [x] Do not reproduce Lab comparison or promotion logic in Autopilot.
+- [x] Handle evaluation failure as a first-class `EVALUATION_FAILED` outcome.
+- [x] Do not automatically modify the candidate after evaluation failure.
 
 ### Exit criteria
 
@@ -1581,16 +1581,16 @@ Opportunity/cluster evidence
 
 ### Tasks
 
-- [ ] Implement recommendation rules.
-- [ ] Require successful evaluation evidence for Agent, Tool, Skill, or Prompt candidate changes.
-- [ ] Include expected operational impact.
-- [ ] Include known risks.
-- [ ] Include bounded pilot scope.
-- [ ] Include success criteria.
-- [ ] Include machine-inspectable rollback/abort conditions where possible.
-- [ ] Include exact candidate manifest provenance.
-- [ ] Preserve all relevant evidence refs.
-- [ ] Require human approval.
+- [x] Implement recommendation rules.
+- [x] Require successful evaluation evidence for Agent, Tool, Skill, or Prompt candidate changes.
+- [x] Include expected operational impact.
+- [x] Include known risks.
+- [x] Include bounded pilot scope.
+- [x] Include success criteria.
+- [x] Include machine-inspectable rollback/abort conditions where possible.
+- [x] Include exact candidate manifest provenance.
+- [x] Preserve all relevant evidence refs.
+- [x] Require human approval.
 
 ### Reference acceptance
 
@@ -1610,13 +1610,13 @@ Record controlled decisions without turning Autopilot into a deployment system.
 
 ### Tasks
 
-- [ ] Implement `DecisionRecord` persistence.
-- [ ] Support approve, reject, request-change, and close outcomes for pilot recommendations.
-- [ ] Support accept, reject, and close outcomes for operational dispositions.
-- [ ] Preserve actor references.
-- [ ] Preserve evidence references.
-- [ ] Prevent an approval record from directly invoking production deployment.
-- [ ] Add audit retrieval from final decision back to source evidence.
+- [x] Implement `DecisionRecord` persistence.
+- [x] Support approve, reject, request-change, and close outcomes for pilot recommendations.
+- [x] Support accept, reject, and close outcomes for operational dispositions.
+- [x] Preserve actor references.
+- [x] Preserve evidence references.
+- [x] Prevent an approval record from directly invoking production deployment.
+- [x] Add audit retrieval from final decision back to source evidence.
 
 ### Exit criteria
 

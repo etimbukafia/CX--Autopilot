@@ -108,5 +108,9 @@ separate when both are needed. Proposals always require human review and
 reject operations whose target or undeclared Agent relationship is
 inconsistent.
 
-The next phase may translate a validated proposal into a Harness evaluation
-candidate. That construction is deliberately not implemented here.
+Phase 10 now translates a validated proposal into an evaluation-scoped
+Harness candidate and verifies the resolved manifest against the resulting
+exact graph. Phase 11 submits the baseline and candidate to Improvement Lab
+through an adapter. Candidate construction, evaluation, recommendation, and
+human decision details are documented in
+[`docs/PHASE_10_13_IMPLEMENTATION.md`](PHASE_10_13_IMPLEMENTATION.md).

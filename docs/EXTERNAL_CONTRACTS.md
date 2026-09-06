@@ -1,8 +1,10 @@
 # Verified external contracts for the first reference slice
 
 Verified on 2026-09-06 from the current `main` branches. The Harness checkout
-used for inspection was `c506366d3db69d7c6fff20cfc5c4e53c93ceb9c7`; temporary
-source copies are not part of this repository.
+used for inspection was `c506366d3db69d7c6fff20cfc5c4e53c93ceb9c7`. The
+Improvement Lab checkout used for inspection was
+`acd25805803ff1933f5a1adeee5c3ab0258e811c`. Temporary source copies are not
+part of this repository.
 
 ## AI-native CX Platform
 
@@ -122,9 +124,14 @@ Verified facts needed later:
   contracts carry promotion evidence references. They remain Lab-owned human
   promotion evidence; Autopilot stores only exact references.
 
+Phase 10 and Phase 11 use these public boundaries through adapters. Autopilot
+does not import Lab classes. It submits opaque Lab candidates, datasets, and
+manifests to the runner, and submits the two reports to the comparator. It
+stores stable evaluation, comparison, regression, and promotion references.
+
 ## Autopilot dependency rule
 
 Autopilot core contracts use its own `ExactComponentReference`, evidence
 references, and immutable records. No Harness, CX Platform, or Improvement Lab
-class is imported into `src/cx_autopilot`. Later adapters may translate at the
-boundary and must use the verified contracts above.
+class is imported into `src/cx_autopilot`. The Phase 10 and Phase 11 adapters
+translate at the boundary and use the verified contracts above.
