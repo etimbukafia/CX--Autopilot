@@ -8,6 +8,7 @@ from .cx_platform import (
     CXPlatformSourceError,
     EvidenceIngestionResult,
 )
+from .harness import HarnessInventoryAdapter, HarnessInventoryError, HarnessInventoryPort
 
 __all__ = [
     "CXPlatformDataError",
@@ -16,4 +17,7 @@ __all__ = [
     "CXPlatformHTTPSource",
     "CXPlatformSourceError",
     "EvidenceIngestionResult",
+    "HarnessInventoryAdapter",
+    "HarnessInventoryError",
+    "HarnessInventoryPort",
 ]

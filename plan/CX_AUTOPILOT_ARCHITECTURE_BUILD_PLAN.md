@@ -1,6 +1,6 @@
 # CX Autopilot Architecture and Build Plan
 
-Status: Phases 0-5 implemented; Phases 6-17 pending
+Status: Phases 0-9 implemented; Phases 10-17 pending
 
 ## 1. Product goal
 
@@ -1325,22 +1325,22 @@ Inspect the current governed Agent, Prompt, Skill, Tool, and Policy graph before
 
 ### Tasks
 
-- [ ] Implement the Harness inventory port from the verified Phase 0 contracts.
-- [ ] Read exact agent references.
-- [ ] Read exact prompt references.
-- [ ] Read exact skill references.
-- [ ] Read exact tool references.
-- [ ] Read exact policy references required for diagnosis.
-- [ ] Read agent-to-prompt relationships.
-- [ ] Read agent-to-skill relationships.
-- [ ] Read direct agent tool authority.
-- [ ] Read skill required-tool dependencies.
-- [ ] Read skill optional-tool dependencies.
-- [ ] Read lifecycle/active state where exposed.
-- [ ] Read registry snapshot identity.
-- [ ] Read resolved manifest provenance when available.
-- [ ] Preserve exact versions.
-- [ ] Add tests proving that skill dependency and direct tool authority are different facts.
+- [x] Implement the Harness inventory port from the verified Phase 0 contracts.
+- [x] Read exact agent references.
+- [x] Read exact prompt references.
+- [x] Read exact skill references.
+- [x] Read exact tool references.
+- [x] Read exact policy references required for diagnosis.
+- [x] Read agent-to-prompt relationships.
+- [x] Read agent-to-skill relationships.
+- [x] Read direct agent tool authority.
+- [x] Read skill required-tool dependencies.
+- [x] Read skill optional-tool dependencies.
+- [x] Read lifecycle/active state where exposed.
+- [x] Read registry snapshot identity.
+- [x] Read resolved manifest provenance when available.
+- [x] Preserve exact versions.
+- [x] Add tests proving that skill dependency and direct tool authority are different facts.
 
 ### Exit criteria
 
@@ -1356,21 +1356,21 @@ Classify why the operational opportunity exists without confusing external const
 
 ### Tasks
 
-- [ ] Implement the diagnosis taxonomy exactly.
-- [ ] Implement deterministic diagnosis precedence guards.
-- [ ] Use evidence quality before agent-system diagnosis.
-- [ ] Check external business dependency before classifying a component gap.
-- [ ] Check policy constraint before classifying a Tool or Skill gap.
-- [ ] Check approval friction before component-gap classification where approval is the bottleneck.
-- [ ] Check knowledge-source condition before component-gap classification.
-- [ ] Check Agent existence/composition before Skill, Tool, and Prompt gaps.
-- [ ] Check Skill existence before Tool gap.
-- [ ] Check Tool existence and direct agent authority before Prompt gap.
-- [ ] Add bounded model-assisted diagnosis only when deterministic guards cannot resolve the case.
-- [ ] Validate model output against typed taxonomy.
-- [ ] Preserve supporting and conflicting evidence.
-- [ ] Require an inventory snapshot for `AGENT_GAP`, `SKILL_GAP`, `TOOL_GAP`, and `PROMPT_GAP`.
-- [ ] Add explicit confidence rules.
+- [x] Implement the diagnosis taxonomy exactly.
+- [x] Implement deterministic diagnosis precedence guards.
+- [x] Use evidence quality before agent-system diagnosis.
+- [x] Check external business dependency before classifying a component gap.
+- [x] Check policy constraint before classifying a Tool or Skill gap.
+- [x] Check approval friction before component-gap classification where approval is the bottleneck.
+- [x] Check knowledge-source condition before component-gap classification.
+- [x] Check Agent existence/composition before Skill, Tool, and Prompt gaps.
+- [x] Check Skill existence before Tool gap.
+- [x] Check Tool existence and direct agent authority before Prompt gap.
+- [x] Add bounded model-assisted diagnosis only when deterministic guards cannot resolve the case.
+- [x] Validate model output against typed taxonomy.
+- [x] Preserve supporting and conflicting evidence.
+- [x] Require an inventory snapshot for `AGENT_GAP`, `SKILL_GAP`, `TOOL_GAP`, and `PROMPT_GAP`.
+- [x] Add explicit confidence rules.
 
 ### Reference acceptance
 
@@ -1404,18 +1404,18 @@ Decide whether an Agent, Tool, Skill, or Prompt change is justified and choose t
 
 ### Tasks
 
-- [ ] Map eligible diagnoses to `ChangeTarget.AGENT`, `TOOL`, `SKILL`, or `PROMPT` only when evidence supports that target.
-- [ ] Route non-agent causes to `ChangeTarget.NO_CHANGE` unless independent evidence supports a component change.
-- [ ] Implement `REUSE` rules.
-- [ ] Implement `EXTEND` rules.
-- [ ] Implement `COMPOSE` rules.
-- [ ] Implement `CREATE` rules.
-- [ ] Implement `NO_CHANGE` rules.
-- [ ] Prefer reuse before extension, extension before composition, and composition before creation when all are safe and sufficient.
-- [ ] Block candidate-path selection when evidence is insufficient.
-- [ ] Produce `OperationalDisposition` for no-change cases.
-- [ ] Ensure `POLICY_CONSTRAINT` does not automatically become a policy-change proposal.
-- [ ] Ensure `APPROVAL_FRICTION` does not bypass approval authority.
+- [x] Map eligible diagnoses to `ChangeTarget.AGENT`, `TOOL`, `SKILL`, or `PROMPT` only when evidence supports that target.
+- [x] Route non-agent causes to `ChangeTarget.NO_CHANGE` unless independent evidence supports a component change.
+- [x] Implement `REUSE` rules.
+- [x] Implement `EXTEND` rules.
+- [x] Implement `COMPOSE` rules.
+- [x] Implement `CREATE` rules.
+- [x] Implement `NO_CHANGE` rules.
+- [x] Prefer reuse before extension, extension before composition, and composition before creation when all are safe and sufficient.
+- [x] Block candidate-path selection when evidence is insufficient.
+- [x] Produce `OperationalDisposition` for no-change cases.
+- [x] Ensure `POLICY_CONSTRAINT` does not automatically become a policy-change proposal.
+- [x] Ensure `APPROVAL_FRICTION` does not bypass approval authority.
 
 ### Reference acceptance
 
@@ -1443,19 +1443,19 @@ Produce a bounded exact proposal that Harness can build without hidden graph mut
 
 ### Tasks
 
-- [ ] Implement typed component-change operations.
-- [ ] Require exact versioned baseline component references.
-- [ ] Require explicit target component relationships.
-- [ ] Keep Agent change operations explicit.
-- [ ] Keep agent tool authority changes explicit.
-- [ ] Keep agent skill-reference changes explicit.
-- [ ] Keep agent prompt-reference changes explicit.
-- [ ] Keep Skill tool-dependency changes explicit.
-- [ ] Keep Prompt changes separate from authority.
-- [ ] Add risk classification.
-- [ ] Add human-review requirement.
-- [ ] Add proposal validation.
-- [ ] Reject proposals that contain implied or undeclared authority expansion.
+- [x] Implement typed component-change operations.
+- [x] Require exact versioned baseline component references.
+- [x] Require explicit target component relationships.
+- [x] Keep Agent change operations explicit.
+- [x] Keep agent tool authority changes explicit.
+- [x] Keep agent skill-reference changes explicit.
+- [x] Keep agent prompt-reference changes explicit.
+- [x] Keep Skill tool-dependency changes explicit.
+- [x] Keep Prompt changes separate from authority.
+- [x] Add risk classification.
+- [x] Add human-review requirement.
+- [x] Add proposal validation.
+- [x] Reject proposals that contain implied or undeclared authority expansion.
 
 ### Reference acceptance
 

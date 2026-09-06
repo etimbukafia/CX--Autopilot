@@ -1,7 +1,8 @@
 # Verified external contracts for the first reference slice
 
-Verified on 2026-09-05 from the current `main` branches. The temporary source
-copies used for inspection are not part of this repository.
+Verified on 2026-09-06 from the current `main` branches. The Harness checkout
+used for inspection was `c506366d3db69d7c6fff20cfc5c4e53c93ceb9c7`; temporary
+source copies are not part of this repository.
 
 ## AI-native CX Platform
 
@@ -57,7 +58,8 @@ Verified facts needed later:
 
 - `ComponentType` is the closed set `AGENT`, `PROMPT`, `SKILL`, `TOOL`, and
   `POLICY`. `ComponentReference` has exact `component_type`, `component_id`,
-  and `version` identity.
+  and version identity; the current registry contracts use exact three-segment
+  versions.
 - `AgentDefinition` and `AgentConfig` use one exact `prompt_ref`, exact
   `skill_refs`, exact executable `tool_refs`, and exact `policy_refs`.
   `PromptDefinition`, `SkillDefinition`, `ToolDefinition`/`ToolDescriptor`,
@@ -77,6 +79,16 @@ Verified facts needed later:
 - `AgentFactory.validate()` is read-only. A dry-run build resolves and returns
   a manifest without registering or constructing a runtime. Active builds and
   runtime authority remain Harness responsibilities.
+
+The Phase 6 adapter calls only the public `AgentRegistry.snapshot`-shaped
+read boundary, normally with `include_inactive=True`. It translates exact
+records into Autopilot references and preserves the separate Agent→Prompt,
+Agent→Skill, Agent→Tool authority, and Skill→Tool dependency edges. An
+explicit tenant is required at adapter construction; it is never inferred
+from component IDs. Optional exact requirement references can be included in
+the inspected graph so a Tool that exists in the registry but is not yet
+direct Agent authority is distinguishable from a missing Tool. The adapter
+does not register, activate, build, or mutate Harness state.
 
 ## Enterprise Agent Improvement Lab
 

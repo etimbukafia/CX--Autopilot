@@ -440,6 +440,8 @@ class AgentSystemInventorySnapshot(ImmutableModel):
     skill_to_optional_tool_edges: tuple[SkillToolDependencyEdge, ...] = ()
     registry_snapshot_ids: tuple[str, ...] = ()
     manifest_refs: tuple[str, ...] = ()
+    component_lifecycles: dict[str, str] = Field(default_factory=dict)
+    manifest_digests: dict[str, str] = Field(default_factory=dict)
     source_system: str = Field(min_length=1)
 
     @field_validator("snapshot_id", "tenant_id", "source_system")
@@ -451,6 +453,10 @@ class AgentSystemInventorySnapshot(ImmutableModel):
     @classmethod
     def captured_at_is_aware(cls, value: datetime) -> datetime:
         return aware_timestamp(value, "captured_at")
+
+    @field_serializer("component_lifecycles", "manifest_digests")
+    def serialize_inventory_metadata(self, value: Mapping[str, str]) -> dict[str, str]:
+        return dict(value)
 
     @model_validator(mode="after")
     def inventory_references_are_consistent(self) -> "AgentSystemInventorySnapshot":
@@ -472,6 +478,19 @@ class AgentSystemInventorySnapshot(ImmutableModel):
             unique_values(values, name)
             if any(not value.strip() for value in values):
                 raise ValueError(f"{name} must not contain blank values")
+        known_component_identities = {
+            reference.identity for _, refs, _ in groups for reference in refs
+        }
+        for identity, lifecycle in self.component_lifecycles.items():
+            if identity not in known_component_identities:
+                raise ValueError("component_lifecycles contains an unknown component identity")
+            if not identity.strip() or not lifecycle.strip():
+                raise ValueError("component_lifecycles keys and values must not be blank")
+        for manifest_id, digest in self.manifest_digests.items():
+            if manifest_id not in self.manifest_refs:
+                raise ValueError("manifest_digests must refer to manifest_refs")
+            if not manifest_id.strip() or not digest.strip():
+                raise ValueError("manifest_digests keys and values must not be blank")
         for edge in (
             *self.agent_to_prompt_edges,
             *self.agent_to_skill_edges,
@@ -516,6 +535,7 @@ class ProblemDiagnosis(ImmutableModel):
     inventory_snapshot_id: str | None = Field(default=None, min_length=1)
     diagnosis_type: DiagnosisType
     summary: str = Field(min_length=1)
+    precedence_rule: str = "deterministic_precedence"
     supporting_evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
     conflicting_evidence_refs: tuple[EvidenceRef, ...] = ()
     confidence: float = Field(ge=0.0, le=1.0)
@@ -526,7 +546,7 @@ class ProblemDiagnosis(ImmutableModel):
     affected_policy_refs: tuple[ExactComponentReference, ...] = ()
     created_at: datetime
 
-    @field_validator("diagnosis_id", "tenant_id", "cluster_id", "summary")
+    @field_validator("diagnosis_id", "tenant_id", "cluster_id", "summary", "precedence_rule")
     @classmethod
     def diagnosis_text_is_non_blank(cls, value: str, info: object) -> str:
         return non_blank(value, getattr(info, "field_name", "value"))
@@ -735,7 +755,7 @@ class ChangeProposal(ImmutableModel):
     rationale: str = Field(min_length=1)
     evidence_refs: tuple[EvidenceRef, ...] = Field(min_length=1)
     risk_classification: str = Field(min_length=1)
-    requires_human_review: bool = True
+    requires_human_review: Literal[True] = True
     created_at: datetime
 
     @field_validator(
@@ -763,6 +783,8 @@ class ChangeProposal(ImmutableModel):
             raise ValueError("ChangeProposal cannot target NO_CHANGE")
         if self.strategy is ChangeStrategy.NO_CHANGE:
             raise ValueError("ChangeProposal cannot use NO_CHANGE strategy")
+        if self.strategy is ChangeStrategy.REUSE:
+            raise ValueError("REUSE must terminate as an OperationalDisposition")
         unique_refs(self.target_agent_refs, "target_agent_refs")
         for ref in self.target_agent_refs:
             _require_type(ref, ComponentType.AGENT, "target_agent_refs")
@@ -784,6 +806,50 @@ class ChangeProposal(ImmutableModel):
         allowed = _allowed_operations(self.change_target)
         if any(change.operation not in allowed for change in operations):
             raise ValueError("a proposed operation is inconsistent with change_target")
+        create_operations = {
+            ComponentChangeOperation.CREATE_AGENT,
+            ComponentChangeOperation.CREATE_TOOL,
+            ComponentChangeOperation.CREATE_SKILL,
+            ComponentChangeOperation.CREATE_PROMPT,
+        }
+        if self.strategy is ChangeStrategy.CREATE and not any(
+            change.operation in create_operations for change in operations
+        ):
+            raise ValueError("CREATE proposals must contain a component creation operation")
+        if self.strategy is ChangeStrategy.EXTEND and any(
+            change.operation in create_operations for change in operations
+        ):
+            raise ValueError("EXTEND proposals must not create a component")
+        if self.strategy is ChangeStrategy.COMPOSE and not any(
+            change.operation is ComponentChangeOperation.COMPOSE_AGENT for change in operations
+        ):
+            raise ValueError("COMPOSE proposals must contain COMPOSE_AGENT")
+        relationship_operations = {
+            ComponentChangeOperation.ADD_AGENT_TOOL_REF,
+            ComponentChangeOperation.REMOVE_AGENT_TOOL_REF,
+            ComponentChangeOperation.ADD_AGENT_SKILL_REF,
+            ComponentChangeOperation.REMOVE_AGENT_SKILL_REF,
+            ComponentChangeOperation.CHANGE_AGENT_PROMPT_REF,
+        }
+        if any(change.operation in relationship_operations for change in operations):
+            target_agent_keys = {
+                (ref.source_system, ref.component_id) for ref in self.target_agent_refs
+            }
+            operation_agent_keys = {
+                (ref.source_system, ref.component_id)
+                for change in operations
+                for ref in (
+                    change.subject_before_ref,
+                    change.subject_after_ref,
+                    change.related_before_ref,
+                    change.related_after_ref,
+                )
+                if ref is not None and ref.component_type is ComponentType.AGENT
+            }
+            if not operation_agent_keys.issubset(target_agent_keys):
+                raise ValueError(
+                    "target_agent_refs must declare every Agent used by a relationship change"
+                )
         return self
 
 
